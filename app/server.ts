@@ -29,6 +29,185 @@ type Message = { role: string; text: string }
 let messages: Message[] = []
 type Command = { name: string; description: string }
 
+// ---- Sessions and projects, as Claude Code keeps them under ~/.claude:
+// `sessions/<pid>.json` for each running one, `projects/<dir>/<id>.jsonl`
+// for every conversation, its folder the project.
+const claudeDir = join(homedir(), '.claude')
+const HEAD_BYTES = 256 * 1024
+const TAIL_BYTES = 512 * 1024
+const SESSIONS_PER_PROJECT = 8
+
+type Live = { pid: number; sessionId: string; cwd: string; name: string; status: string; isThis: boolean }
+type Summary = { mtimeMs: number; cwd: string; title: string }
+const summaries = new Map<string, Summary>()
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+const readLive = (): Live[] => {
+  try {
+    return readdirSync(join(claudeDir, 'sessions'))
+      .filter(name => /^\d+\.json$/.test(name))
+      .flatMap(name => {
+        try {
+          const one = JSON.parse(readFileSync(join(claudeDir, 'sessions', name), 'utf8'))
+          if (typeof one.pid !== 'number' || !isAlive(one.pid)) return []
+
+          return [{
+            pid: one.pid,
+            sessionId: String(one.sessionId ?? ''),
+            cwd: String(one.cwd ?? ''),
+            name: String(one.name ?? ''),
+            status: String(one.status ?? ''),
+            isThis: one.pid === parent,
+          }]
+        } catch {
+          return []
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
+// What a conversation file says about itself, from its first and last
+// pieces alone: some of them run to many megabytes.
+const summarize = async (path: string, mtimeMs: number): Promise<Summary> => {
+  const known = summaries.get(path)
+  if (known !== undefined && known.mtimeMs === mtimeMs) return known
+  const file = Bun.file(path)
+  const head = await file.slice(0, HEAD_BYTES).text()
+  const tail = file.size > HEAD_BYTES ? await file.slice(Math.max(HEAD_BYTES, file.size - TAIL_BYTES)).text() : ''
+  let cwd = ''
+  let title = ''
+  let prompt = ''
+  for (const line of `${head}\n${tail}`.split('\n')) {
+    if (!line.startsWith('{')) continue
+    let row: Record<string, unknown>
+    try {
+      row = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (cwd === '' && typeof row.cwd === 'string') cwd = row.cwd
+    if (row.type === 'custom-title' && typeof row.customTitle === 'string') title = row.customTitle
+    if (row.type === 'ai-title' && typeof row.aiTitle === 'string' && !title) title = row.aiTitle
+    if (prompt === '' && row.type === 'user') {
+      const content = (row.message as { content?: unknown } | undefined)?.content
+      const text = typeof content === 'string' ? content
+        : Array.isArray(content) ? String(content.find(block => block?.type === 'text')?.text ?? '') : ''
+      if (text.trim() !== '' && !text.trimStart().startsWith('<')) prompt = text.trim()
+    }
+  }
+  const summary = { mtimeMs, cwd, title: (title || prompt || 'Sesión sin título').replace(/\s+/g, ' ').slice(0, 120) }
+  summaries.set(path, summary)
+
+  return summary
+}
+
+type Project = {
+  cwd: string
+  name: string
+  updatedAt: number
+  sessions: Array<{ id: string; title: string; updatedAt: number; isLive: boolean }>
+}
+
+const readProjects = async (live: Live[]): Promise<Project[]> => {
+  const byCwd = new Map<string, Project>()
+  const liveIds = new Set(live.map(one => one.sessionId))
+  const root = join(claudeDir, 'projects')
+  let folders: string[] = []
+  try {
+    folders = readdirSync(root)
+  } catch {
+    return []
+  }
+  for (const folder of folders) {
+    let names: string[] = []
+    try {
+      names = readdirSync(join(root, folder)).filter(name => name.endsWith('.jsonl'))
+    } catch {
+      continue
+    }
+    for (const name of names) {
+      const path = join(root, folder, name)
+      try {
+        const { mtimeMs, size } = statSync(path)
+        if (size === 0) continue
+        const summary = await summarize(path, mtimeMs)
+        if (summary.cwd === '') continue
+        const project = byCwd.get(summary.cwd) ?? {
+          cwd: summary.cwd,
+          name: summary.cwd === homedir() ? 'Carpeta personal' : basename(summary.cwd),
+          updatedAt: 0,
+          sessions: [],
+        }
+        const id = name.replace(/\.jsonl$/, '')
+        project.sessions.push({ id, title: summary.title, updatedAt: mtimeMs, isLive: liveIds.has(id) })
+        project.updatedAt = Math.max(project.updatedAt, mtimeMs)
+        byCwd.set(summary.cwd, project)
+      } catch {
+        // A file being written or gone: skipped this time.
+      }
+    }
+  }
+  // Running sessions in a folder with no conversation saved yet.
+  for (const one of live) {
+    if (one.cwd !== '' && !byCwd.has(one.cwd)) {
+      byCwd.set(one.cwd, { cwd: one.cwd, name: basename(one.cwd), updatedAt: Date.now(), sessions: [] })
+    }
+  }
+
+  return [...byCwd.values()]
+    .map(project => ({
+      ...project,
+      sessions: project.sessions.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SESSIONS_PER_PROJECT),
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+// The window of the terminal a process runs in: its nearest ancestor
+// Hyprland draws a window for.
+const windowOf = (pid: number): string | undefined => {
+  try {
+    const clients = JSON.parse(hypr(['clients', '-j'])) as Array<{ address: string; pid: number }>
+    const byPid = new Map(clients.map(client => [client.pid, client.address]))
+    let at = pid
+    for (let step = 0; step < 12 && at > 1; step += 1) {
+      const found = byPid.get(at)
+      if (found !== undefined) return found
+      const stat = readFileSync(`/proc/${at}/stat`, 'utf8')
+      at = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1])
+    }
+  } catch {
+    // No Hyprland, or the process is gone.
+  }
+
+  return undefined
+}
+
+const focusWindow = (address: string) => {
+  // Shown again first if this window hid it.
+  const hidden = readTerminal()
+  if (hidden.address === address && hidden.isHidden) setTerminal(false)
+  hypr(['dispatch', `hl.dsp.focus({ window = 'address:${address}' })`])
+}
+
+const openTerminal = (cwd: string, args: string[]) => {
+  spawn('setsid', ['-f', 'kitty', '--directory', cwd, 'claude', ...args], {
+    stdio: 'ignore',
+    detached: true,
+    cwd,
+  }).unref()
+}
+
 // Permissions and questions waiting on the person. The mod polls for the
 // answer in short waits; an answer is kept until it collects it.
 type Ask = { id: string }
@@ -419,6 +598,57 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     }
 
     return json({})
+  }
+
+  if (request.method === 'GET' && url.pathname === '/sessions') {
+    const live = readLive()
+
+    return json({ live, projects: await readProjects(live), here: process.cwd() })
+  }
+
+  // Only what the lists name: a known project's folder, a known session, a
+  // running session's terminal. Nothing here runs a command of the page's.
+  if (request.method === 'POST' && url.pathname === '/sessions/open') {
+    const body = (await request.json()) as { cwd?: unknown; sessionId?: unknown; pid?: unknown; path?: unknown }
+    const live = readLive()
+    if (typeof body.pid === 'number') {
+      const running = live.find(one => one.pid === body.pid)
+      const address = running ? windowOf(running.pid) : undefined
+      if (address === undefined) return json({ error: 'No encontré la ventana de esa sesión.' }, 400)
+      focusWindow(address)
+
+      return json({ done: 'focus' })
+    }
+    if (typeof body.path === 'string') {
+      const path = body.path.trim().replace(/^~(?=\/|$)/, homedir())
+      try {
+        const real = realpathSync(path)
+        if (!statSync(real).isDirectory()) throw new Error('not a folder')
+        openTerminal(real, [])
+
+        return json({ done: 'new' })
+      } catch {
+        return json({ error: 'Esa carpeta no existe.' }, 400)
+      }
+    }
+    const project = (await readProjects(live)).find(one => one.cwd === body.cwd)
+    if (project === undefined) return json({ error: 'Proyecto desconocido.' }, 400)
+    if (body.sessionId === undefined) {
+      openTerminal(project.cwd, [])
+
+      return json({ done: 'new' })
+    }
+    const running = live.find(one => one.sessionId === body.sessionId)
+    const address = running ? windowOf(running.pid) : undefined
+    if (address !== undefined) {
+      focusWindow(address)
+
+      return json({ done: 'focus' })
+    }
+    if (!project.sessions.some(one => one.id === body.sessionId)) return json({ error: 'Sesión desconocida.' }, 400)
+    openTerminal(project.cwd, ['--resume', String(body.sessionId)])
+
+    return json({ done: 'resume' })
   }
 
   if (request.method === 'POST' && url.pathname === '/ask') {
