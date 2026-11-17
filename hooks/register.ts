@@ -127,10 +127,43 @@ async function chat($: EngineInterface): Promise<void> {
   }
 }
 
-// A message typed in the window: submitted as the person's own words. A
-// slash command is put in the prompt box instead, for their Enter.
+// The slash commands the person can run, for the window's suggestions.
+async function commands($: EngineInterface): Promise<void> {
+  if (current === undefined) return
+  try {
+    const list = await $.command.list()
+    post($, '/commands', {
+      commands: list.map(one => ({
+        name: one.name,
+        description: one.description.replace(/\s+/g, ' ').slice(0, 160),
+      })),
+    })
+  } catch {
+    // The window suggests none.
+  }
+}
+
+// A slash command typed in the window: run as if typed at the prompt. One
+// the engine will not run for a plugin is left in the prompt box instead.
+async function run($: EngineInterface, text: string): Promise<void> {
+  const [, name = '', args = ''] = /^\/(\S+)\s*([\s\S]*)$/.exec(text) ?? []
+  try {
+    const ran = await $.command.run({ command: name, args })
+    const said = (ran.text ?? '').trim()
+    if (said !== '') post($, '/notice', { isOk: true, text: said.slice(0, 300) })
+  } catch {
+    await fill($, text)
+  }
+}
+
+// Claude waits on an answer only the terminal can take.
+function attention($: EngineInterface, text: string): void {
+  post($, '/attention', { text })
+}
+
+// A message typed in the window: submitted as the person's own words.
 async function send($: EngineInterface, text: string): Promise<void> {
-  if (text.startsWith('/')) return fill($, text)
+  if (text.startsWith('/')) return run($, text)
   const sent = await $.prompt
     .submit({ text, asUser: true })
     .catch(() => undefined)
@@ -191,6 +224,7 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
       post($, '/snapshot', { items: await read($, feed) })
       void report($)
       void chat($)
+      void commands($)
       settle(found)
     }
     if (message.type === 'bye') await update($, link, () => null)
@@ -287,6 +321,9 @@ export const register: Register = on => {
       isAgent: typeof input.agentId === 'string',
     }
     await record($, item)
+    if (item.label === 'AskUserQuestion' || item.label === 'ExitPlanMode') {
+      attention($, 'Claude te hizo una pregunta: respóndela en la terminal.')
+    }
     // The call shows in the chat as it starts, a few seconds apart at most.
     if (!item.isAgent && item.startedAt - chatAt > CHAT_EVERY_MS) {
       chatAt = item.startedAt
@@ -306,6 +343,20 @@ export const register: Register = on => {
     }
 
     return ran
+  })
+
+  on('classic.PermissionRequest', ($, e, next) => {
+    attention($, `Claude pide permiso para usar ${e.tool_name}: respóndelo en la terminal.`)
+
+    return next(e)
+  })
+
+  on('classic.Notification', ($, e, next) => {
+    if (e.notification_type === 'permission_prompt') {
+      attention($, 'Claude espera tu permiso en la terminal.')
+    }
+
+    return next(e)
   })
 
   on('turn.start', ($, e, next) => {

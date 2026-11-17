@@ -46,6 +46,7 @@
     padding: 10px 16px;
     border-bottom: 1px solid var(--line);
   }
+  .top .chip { margin-left: auto; }
   .brand { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 17px; }
   .brand .spark { color: var(--accent); font-size: 18px; line-height: 1; }
   .status { display: flex; align-items: center; gap: 6px; color: var(--dim); font: 12px var(--sans); margin-left: 6px; }
@@ -138,6 +139,17 @@
   .chip.is-plain { border-color: transparent; padding: 4px 8px; }
   .adder { display: grid; gap: 8px; margin-bottom: 10px; }
   .adder[hidden] { display: none; }
+  .dock > .inner { position: relative; }
+  .suggest {
+    position: absolute; left: 0; right: 0; bottom: 100%; margin: 0 0 6px; padding: 6px; list-style: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    max-height: 300px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); z-index: 2;
+  }
+  .suggest[hidden] { display: none; }
+  .suggest li { display: flex; gap: 12px; align-items: baseline; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+  .suggest li[aria-selected="true"] { background: var(--raised); }
+  .suggest .command { flex: none; font: 13px var(--mono); color: var(--text); }
+  .suggest .what { color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .composer {
     display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 16px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
@@ -240,6 +252,7 @@
     <span class="spark">✳</span>Claude
     <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
   </div>
+  <button class="chip" id="terminalButton" hidden>Ocultar terminal</button>
   <nav role="tablist">
     <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
     <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
@@ -269,6 +282,7 @@
             <textarea class="field" id="newText" rows="2" placeholder="Texto que le manda a Claude"></textarea>
             <div class="end"><button class="button" id="addShortcut">Añadir atajo</button></div>
           </div>
+          <ul class="suggest" id="suggest" role="listbox" aria-label="Comandos" hidden></ul>
           <div class="composer">
             <textarea id="request" rows="1" placeholder="Escríbele a Claude" aria-label="Mensaje para Claude"></textarea>
             <button class="send-button" id="sendRequest" aria-label="Enviar" disabled>↑</button>
@@ -478,12 +492,68 @@
     fitRequest()
     if (!(await sendToClaude(text))) { request.value = text; fitRequest() }
   }
-  request.addEventListener('input', fitRequest)
+  // ---- Command suggestions, as the terminal's prompt offers them
+  let commands = []
+  let offered = []
+  let chosen = 0
+  const drawSuggest = () => {
+    const typed = /^\/(\S*)$/.exec(request.value)
+    const word = typed ? typed[1].toLowerCase() : null
+    offered = word === null ? [] : [
+      ...commands.filter(one => one.name.toLowerCase().startsWith(word)),
+      ...commands.filter(one => !one.name.toLowerCase().startsWith(word) && one.name.toLowerCase().includes(word)),
+    ].slice(0, 40)
+    chosen = Math.min(chosen, Math.max(0, offered.length - 1))
+    const list = byId('suggest')
+    list.hidden = offered.length === 0
+    list.replaceChildren(...offered.map((one, at) => {
+      const row = element('li')
+      row.setAttribute('role', 'option')
+      row.setAttribute('aria-selected', String(at === chosen))
+      row.append(element('span', 'command', `/${one.name}`), element('span', 'what', one.description))
+      row.addEventListener('mousedown', event => { event.preventDefault(); take(at) })
+      return row
+    }))
+    list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  }
+  const take = at => {
+    const one = offered[at]
+    if (!one) return
+    request.value = `/${one.name} `
+    fitRequest()
+    drawSuggest()
+    request.focus()
+  }
+  request.addEventListener('input', () => { chosen = 0; fitRequest(); drawSuggest() })
+  request.addEventListener('blur', () => { byId('suggest').hidden = true })
   request.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    const isOpen = !byId('suggest').hidden
+    if (isOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault()
+      chosen = (chosen + (event.key === 'ArrowDown' ? 1 : offered.length - 1)) % offered.length
+      drawSuggest()
+    } else if (isOpen && (event.key === 'Tab' || event.key === 'Enter') && !event.shiftKey) {
+      event.preventDefault()
+      take(chosen)
+    } else if (isOpen && event.key === 'Escape') {
+      byId('suggest').hidden = true
+    } else if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault()
       sendMessage()
     }
+  })
+
+  // ---- The terminal's window, hidden or shown
+  let terminal = { isSupported: false, isHidden: false }
+  const drawTerminal = next => {
+    terminal = next ?? terminal
+    byId('terminalButton').hidden = !terminal.isSupported
+    byId('terminalButton').textContent = terminal.isHidden ? 'Mostrar terminal' : 'Ocultar terminal'
+  }
+  byId('terminalButton').addEventListener('click', async () => {
+    const answer = await api('/terminal', { isHidden: !terminal.isHidden }).catch(() => undefined)
+    if (answer === undefined || answer.error) toast('No se pudo mover la terminal.', false)
+    else drawTerminal(answer)
   })
   byId('sendRequest').addEventListener('click', sendMessage)
 
@@ -663,6 +733,8 @@
     drawFeed()
     drawUsage(hello.usage)
     drawChat(true)
+    commands = hello.commands ?? []
+    drawTerminal(hello.terminal)
   })
   events.addEventListener('snapshot', event => {
     items = JSON.parse(event.data).items
@@ -680,6 +752,8 @@
     messages = JSON.parse(event.data).messages
     drawChat()
   })
+  events.addEventListener('commands', event => { commands = JSON.parse(event.data).commands })
+  events.addEventListener('terminal', event => drawTerminal(JSON.parse(event.data)))
   events.addEventListener('usage', event => drawUsage(JSON.parse(event.data).usage))
   events.addEventListener('notice', event => {
     const notice = JSON.parse(event.data)

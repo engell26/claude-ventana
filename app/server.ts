@@ -27,6 +27,79 @@ let isBusy = false
 let usage: unknown = null
 type Message = { role: string; text: string }
 let messages: Message[] = []
+type Command = { name: string; description: string }
+let commands: Command[] = []
+
+// The terminal Claude runs in, hidden and shown through Hyprland: moved to a
+// special workspace and back. Elsewhere the window offers no such button.
+const terminalPid = Number(process.env.KITTY_PID || 0)
+const HIDDEN = 'special:claude-terminal'
+
+const hypr = (args: string[]): string => {
+  const ran = Bun.spawnSync(['hyprctl', ...args], { stdout: 'pipe', stderr: 'ignore' })
+
+  return ran.stdout.toString()
+}
+
+type Terminal = { isSupported: boolean; isHidden: boolean; address?: string }
+
+const readTerminal = (): Terminal => {
+  const none = { isSupported: false, isHidden: false }
+  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE || terminalPid === 0) return none
+  try {
+    const clients = JSON.parse(hypr(['clients', '-j'])) as Array<{
+      address: string
+      pid: number
+      workspace: { name: string }
+    }>
+    // One process drawing several windows: which is Claude's is not known.
+    const mine = clients.filter(client => client.pid === terminalPid)
+    const [only] = mine
+    if (mine.length !== 1 || only === undefined) return none
+
+    return {
+      isSupported: true,
+      isHidden: only.workspace.name === HIDDEN,
+      address: only.address,
+    }
+  } catch {
+    return none
+  }
+}
+
+const setTerminal = (isHidden: boolean): Terminal => {
+  const found = readTerminal()
+  if (found.address === undefined || found.isHidden === isHidden) return found
+  try {
+    const target = isHidden
+      ? HIDDEN
+      : String((JSON.parse(hypr(['activeworkspace', '-j'])) as { id: number }).id)
+    // Hyprland's Lua dispatchers first; the older spelling where that one
+    // did not move the window.
+    hypr([
+      'dispatch',
+      `hl.dsp.window.move({ workspace = '${target}', follow = false, window = 'address:${found.address}' })`,
+    ])
+    if (readTerminal().isHidden !== isHidden) {
+      hypr(['dispatch', 'movetoworkspacesilent', `${target},address:${found.address}`])
+    }
+  } catch {
+    // Read back below: the button shows what happened.
+  }
+  const now = readTerminal()
+  broadcast('terminal', { isSupported: now.isSupported, isHidden: now.isHidden })
+
+  return now
+}
+
+// The terminal never stays hidden behind a server that is gone.
+const leave = () => {
+  setTerminal(false)
+  process.exit(0)
+}
+process.on('SIGTERM', leave)
+process.on('SIGINT', leave)
+process.on('SIGHUP', leave)
 
 // The person's shortcuts, kept outside the mod's folder so an update of the
 // mod does not replace them.
@@ -171,6 +244,8 @@ const handle = async (request: Request, port: number): Promise<Response> => {
             usage,
             build,
             messages,
+            commands,
+            terminal: readTerminal(),
           }),
         )
       },
@@ -252,6 +327,29 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     const { message } = (await request.json()) as { message: Message }
     messages = [...messages, message].slice(-80)
     broadcast('chat', { messages })
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/commands') {
+    commands = ((await request.json()) as { commands: Command[] }).commands
+    broadcast('commands', { commands })
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/terminal') {
+    const body = (await request.json()) as { isHidden: unknown }
+    const now = setTerminal(body.isHidden === true)
+
+    return json({ isSupported: now.isSupported, isHidden: now.isHidden })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/attention') {
+    const { text } = (await request.json()) as { text: string }
+    // The answer is asked for in the terminal: bring it back.
+    setTerminal(false)
+    broadcast('notice', { isOk: false, text })
 
     return json({})
   }
@@ -339,6 +437,6 @@ setInterval(() => {
   const isIdle = clients.size === 0 && Date.now() - lastClientAt > IDLE_EXIT_MS
   if (isOrphan || isIdle) {
     if (isIdle) say({ type: 'bye' })
-    process.exit(0)
+    leave()
   }
 }, 5000)
