@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude</title>
+<style>
+  :root {
+    --bg: #17161a;
+    --panel: #201f24;
+    --line: #34323a;
+    --text: #ecebef;
+    --dim: #9a97a3;
+    --accent: #d97757;
+    --ok: #6fbf8b;
+    --off: #c9665c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+  h1 span { color: var(--accent); }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); }
+  .is-on .dot { background: var(--ok); }
+  nav { display: flex; border-bottom: 1px solid var(--line); }
+  nav button {
+    flex: 1;
+    padding: 10px 4px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--dim);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  nav button:hover { color: var(--text); }
+  nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  main { flex: 1; overflow-y: auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .empty {
+    margin-top: 48px;
+    text-align: center;
+    color: var(--dim);
+  }
+  .empty strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 4px; }
+  .busy { color: var(--dim); font-size: 12px; margin: 0 0 12px; }
+  .busy.is-busy { color: var(--accent); }
+  ol.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .feed li {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 2px 8px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .feed .mark { color: var(--ok); }
+  .feed .is-running .mark { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+  .feed .is-error .mark { color: var(--off); }
+  .feed .is-prompt { border-color: var(--accent); }
+  .feed .is-prompt .mark { color: var(--accent); }
+  .feed .name { font-weight: 600; }
+  .feed .name small { color: var(--dim); font-weight: 400; margin-left: 6px; }
+  .feed .time { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .feed .detail {
+    grid-column: 2 / 4;
+    color: var(--dim);
+    font: 12px/1.4 ui-monospace, monospace;
+    overflow-wrap: anywhere;
+  }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) { .feed .is-running .mark { animation: none; } }
+  h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pair .card { margin-bottom: 10px; }
+  .big { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .big.is-small { font-size: 14px; }
+  .meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .note { color: var(--dim); font-size: 12px; margin: 0; }
+  .rows { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+  .rows span:nth-child(odd) { color: var(--dim); }
+  .limit + .limit { margin-top: 12px; }
+  .limit header { display: flex; justify-content: space-between; padding: 0; border: 0; }
+  .plugin { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .plugin .name { font-weight: 600; overflow-wrap: anywhere; }
+  .switch {
+    flex: none; width: 40px; height: 22px; border-radius: 11px; border: 0; padding: 2px;
+    background: var(--line); cursor: pointer; transition: background 0.15s;
+  }
+  .switch::after { content: ''; display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--text); transition: transform 0.15s; }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); }
+  .switch:disabled { opacity: 0.5; cursor: progress; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .bar h2 { margin: 0; }
+  .button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .button:hover { border-color: var(--dim); }
+  .button.is-main { background: var(--accent); border-color: var(--accent); color: #1b1410; font-weight: 600; }
+  .button.is-quiet { border-color: transparent; background: none; color: var(--dim); padding: 6px; }
+  textarea, input[type="text"] {
+    width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px; font: inherit; resize: vertical;
+  }
+  textarea:focus, input[type="text"]:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .send { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 20px; }
+  .shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .shortcuts .chip { display: inline-flex; align-items: center; }
+  .shortcuts .remove { margin-left: 2px; }
+  .adder { display: grid; gap: 8px; margin-top: 12px; }
+  .adder[hidden] { display: none; }
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: 44px; padding: 10px 12px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--ok); font-size: 13px;
+  }
+  .toast.is-bad { border-color: var(--off); }
+  .toast[hidden] { display: none; }
+  footer {
+    padding: 8px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>✳</span> Claude</h1>
+  <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
+</header>
+<nav role="tablist">
+  <button role="tab" data-tab="actividad" aria-selected="true">Actividad</button>
+  <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
+  <button role="tab" data-tab="mods" aria-selected="false">Mods</button>
+  <button role="tab" data-tab="pedidos" aria-selected="false">Pedidos</button>
+</nav>
+<main>
+  <section id="actividad">
+    <p class="busy" id="busy">En espera</p>
+    <ol class="feed" id="feed"></ol>
+    <p class="empty" id="feedEmpty"><strong>Sin actividad todavía</strong>Aquí aparece cada herramienta que use Claude.</p>
+  </section>
+  <section id="uso" hidden>
+    <div class="pair">
+      <div class="card"><h2>Sesión</h2><div class="big" id="uptime">—</div></div>
+      <div class="card"><h2>Costo</h2><div class="big" id="cost">—</div></div>
+    </div>
+    <div class="card"><h2>Modelo</h2><div class="big is-small" id="model">—</div></div>
+    <div class="card">
+      <h2>Contexto</h2>
+      <div class="big" id="contextPercent">—</div>
+      <div class="meter"><i id="contextMeter" style="width:0"></i></div>
+      <p class="note" id="contextNote">Sin datos todavía.</p>
+    </div>
+    <div class="card"><h2>Límites de la cuenta</h2><div id="limits"><p class="note">Sin lecturas todavía.</p></div></div>
+    <div class="card"><h2>Último turno</h2><div class="rows" id="turn"><p class="note">Aparece al terminar un turno.</p></div></div>
+  </section>
+  <section id="mods" hidden>
+    <div class="bar"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
+    <div id="plugins"><p class="note">Cargando.</p></div>
+    <div class="card" id="applyCard" hidden>
+      <p class="note">El cambio quedó guardado. Para aplicarlo en esta sesión hace falta <code>/reload-plugins</code>.</p>
+      <div class="send"><span></span><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
+    </div>
+  </section>
+  <section id="pedidos" hidden>
+    <h2>Pedido</h2>
+    <textarea id="request" rows="5" placeholder="Escribe lo que quieres pedirle a Claude"></textarea>
+    <div class="send">
+      <p class="note">Llega al prompt de la terminal; tú das Enter.</p>
+      <button class="button is-main" id="sendRequest">Enviar al prompt</button>
+    </div>
+    <div class="bar"><h2>Atajos</h2><button class="button" id="editShortcuts">Editar</button></div>
+    <div class="shortcuts" id="shortcuts"></div>
+    <div class="adder" id="adder" hidden>
+      <input type="text" id="newLabel" maxlength="40" placeholder="Nombre del atajo">
+      <textarea id="newText" rows="3" placeholder="Texto que manda al prompt"></textarea>
+      <div class="send"><span></span><button class="button" id="addShortcut">Añadir atajo</button></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<footer id="cwd">&nbsp;</footer>
+<script>
+  const token = new URLSearchParams(location.search).get('t') ?? ''
+  const statusBox = document.getElementById('statusBox')
+  const status = document.getElementById('status')
+
+  const setConnected = isOn => {
+    statusBox.classList.toggle('is-on', isOn)
+    status.textContent = isOn ? 'Conectado' : 'Desconectado'
+  }
+
+  for (const tab of document.querySelectorAll('nav button')) {
+    tab.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('nav button')) {
+        other.setAttribute('aria-selected', String(other === tab))
+      }
+      for (const section of document.querySelectorAll('main section')) {
+        section.hidden = section.id !== tab.dataset.tab
+      }
+    })
+  }
+
+  // EventSource retries by itself, which is what brings the window back
+  // after the mod reloads and the server restarts on the same port.
+  const events = new EventSource(`/events?t=${encodeURIComponent(token)}`)
+  events.onopen = () => setConnected(true)
+  events.onerror = () => setConnected(false)
+  const byId = id => document.getElementById(id)
+
+  const api = async (path, body) => {
+    const response = await fetch(path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'x-ventana-token': token, 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return response.json()
+  }
+
+  let toastTimer
+  const toast = (text, isOk = true) => {
+    const node = byId('toast')
+    node.textContent = text
+    node.classList.toggle('is-bad', !isOk)
+    node.hidden = false
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => { node.hidden = true }, 5000)
+  }
+
+  const sendToPrompt = async text => {
+    if (text.trim() === '') return
+    const sent = await api('/fill', { text }).catch(() => ({ error: 'red' }))
+    if (sent.error) toast('No se pudo enviar: la sesión no responde.', false)
+  }
+
+  // ---- Uso
+  const count = number => new Intl.NumberFormat('es').format(number)
+  const LIMIT_NAMES = { five_hour: 'Ventana de 5 horas', seven_day: 'Ventana de 7 días', spend_limit: 'Límite de gasto' }
+  let startedAt
+
+  const drawUptime = () => {
+    if (startedAt === undefined) return
+    const minutes = Math.max(0, Math.floor((Date.now() - startedAt) / 60000))
+    byId('uptime').textContent = minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+  }
+  setInterval(drawUptime, 15000)
+
+  const element0 = (tag, className, text) => {
+    const node = document.createElement(tag)
+    if (className) node.className = className
+    if (text !== undefined) node.textContent = text
+    return node
+  }
+
+  const drawUsage = usage => {
+    if (!usage) return
+    startedAt = usage.startedAt
+    drawUptime()
+    byId('model').textContent = usage.model ?? '—'
+    byId('cost').textContent = usage.cost ? `$${usage.cost.usd.toFixed(2)}` : '—'
+    const context = usage.context ?? {}
+    const percent = context.percent ?? (context.tokens !== undefined && context.window ? (context.tokens / context.window) * 100 : undefined)
+    byId('contextPercent').textContent = percent === undefined ? '—' : `${Math.round(percent)} %`
+    byId('contextMeter').style.width = `${Math.min(100, percent ?? 0)}%`
+    byId('contextNote').textContent = context.tokens === undefined
+      ? `Ventana de ${count(context.window ?? 0)} tokens.`
+      : `${count(context.tokens)} de ${count(context.window)} tokens.`
+    const limits = byId('limits')
+    if ((usage.rateLimits ?? []).length > 0) {
+      limits.replaceChildren(...usage.rateLimits.map(limit => {
+        const box = element0('div', 'limit')
+        const head = element0('header')
+        head.append(element0('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element0('span', '', `${Math.round(limit.percentUsed)} %`))
+        const meter = element0('div', 'meter')
+        const fill = element0('i')
+        fill.style.width = `${Math.min(100, limit.percentUsed)}%`
+        meter.append(fill)
+        box.append(head, meter)
+        if (limit.resetsAt) box.append(element0('p', 'note', `Se reinicia: ${new Date(limit.resetsAt).toLocaleString('es')}`))
+        return box
+      }))
+    }
+    if (usage.turn) {
+      const turn = usage.turn
+      const rows = [
+        ['Entrada', turn.input_tokens], ['Salida', turn.output_tokens],
+        ['Leídos de caché', turn.cache_read_input_tokens], ['Escritos en caché', turn.cache_creation_input_tokens],
+      ]
+      byId('turn').replaceChildren(...rows.flatMap(([name, value]) => [element0('span', '', name), element0('span', '', `${count(value ?? 0)} tokens`)]))
+    }
+  }
+
+  // ---- Mods
+  let isPluginBusy = false
+  const drawPlugins = plugins => {
+    byId('plugins').replaceChildren(...plugins.map(plugin => {
+      const [name, market] = plugin.id.split('@')
+      const card = element0('div', 'card plugin')
+      const text = element0('div')
+      text.append(element0('div', 'name', name), element0('p', 'note', [market, plugin.version].filter(Boolean).join(' · ')))
+      const toggle = element0('button', 'switch')
+      toggle.setAttribute('role', 'switch')
+      toggle.setAttribute('aria-checked', String(plugin.enabled))
+      toggle.setAttribute('aria-label', `${plugin.enabled ? 'Apagar' : 'Prender'} ${name}`)
+      toggle.disabled = isPluginBusy
+      toggle.addEventListener('click', () => togglePlugin(plugin))
+      card.append(text, toggle)
+      return card
+    }))
+  }
+  const loadPlugins = async () => {
+    const answer = await api('/plugins').catch(error => ({ error: String(error) }))
+    if (answer.error) byId('plugins').replaceChildren(element0('p', 'note', `No pude leer los plugins: ${answer.error}`))
+    else drawPlugins(answer.plugins)
+  }
+  const togglePlugin = async plugin => {
+    isPluginBusy = true
+    for (const toggle of document.querySelectorAll('.switch')) toggle.disabled = true
+    const answer = await api('/plugins', { id: plugin.id, enabled: !plugin.enabled }).catch(error => ({ error: String(error) }))
+    isPluginBusy = false
+    if (answer.error) {
+      toast(`No se pudo cambiar: ${answer.error}`, false)
+      loadPlugins()
+      return
+    }
+    drawPlugins(answer.plugins)
+    if (answer.isOk) byId('applyCard').hidden = false
+    else toast(answer.message || 'El cambio no se aplicó.', false)
+  }
+  byId('reloadPlugins').addEventListener('click', loadPlugins)
+  byId('applyButton').addEventListener('click', () => sendToPrompt('/reload-plugins'))
+  loadPlugins()
+
+  // ---- Pedidos
+  let shortcuts = []
+  let isEditing = false
+  const saveShortcuts = async next => {
+    const answer = await api('/shortcuts', { shortcuts: next }).catch(() => ({ error: 'red' }))
+    if (answer.error) return toast('No se pudo guardar el atajo.', false)
+    shortcuts = answer.shortcuts
+    drawShortcuts()
+  }
+  const drawShortcuts = () => {
+    byId('shortcuts').replaceChildren(...shortcuts.map((shortcut, at) => {
+      const chip = element0('span', 'chip')
+      const run = element0('button', 'button', shortcut.label)
+      run.title = shortcut.text
+      run.addEventListener('click', () => sendToPrompt(shortcut.text))
+      chip.append(run)
+      if (isEditing) {
+        const remove = element0('button', 'button is-quiet remove', '✕')
+        remove.setAttribute('aria-label', `Quitar ${shortcut.label}`)
+        remove.addEventListener('click', () => saveShortcuts(shortcuts.filter((_, other) => other !== at)))
+        chip.append(remove)
+      }
+      return chip
+    }))
+  }
+  byId('editShortcuts').addEventListener('click', () => {
+    isEditing = !isEditing
+    byId('editShortcuts').textContent = isEditing ? 'Listo' : 'Editar'
+    byId('adder').hidden = !isEditing
+    drawShortcuts()
+  })
+  byId('addShortcut').addEventListener('click', async () => {
+    const label = byId('newLabel').value.trim()
+    const text = byId('newText').value.trim()
+    if (label === '' || text === '') return toast('El atajo necesita nombre y texto.', false)
+    await saveShortcuts([...shortcuts, { label, text }])
+    byId('newLabel').value = ''
+    byId('newText').value = ''
+  })
+  let isRequestPending = false
+  byId('sendRequest').addEventListener('click', async () => {
+    isRequestPending = true
+    await sendToPrompt(byId('request').value)
+  })
+  api('/shortcuts').then(answer => { shortcuts = answer.shortcuts ?? []; drawShortcuts() }).catch(() => {})
+
+  let items = []
+  let build
+
+  const span = (item) => {
+    if (item.endedAt === undefined) return 'en curso'
+    const ms = item.endedAt - item.startedAt
+    if (item.kind === 'prompt') return new Date(item.startedAt).toLocaleTimeString()
+    return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
+  }
+
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag)
+    if (className) node.className = className
+    if (text !== undefined) node.textContent = text
+    return node
+  }
+
+  const draw = () => {
+    const feed = document.getElementById('feed')
+    feed.replaceChildren(...[...items].reverse().map(item => {
+      const isRunning = item.endedAt === undefined
+      const state = item.kind === 'prompt' ? 'is-prompt'
+        : isRunning ? 'is-running' : item.isError ? 'is-error' : ''
+      const row = element('li', state)
+      const mark = item.kind === 'prompt' ? '›' : isRunning ? '●' : item.isError ? '✕' : '✓'
+      const name = element('span', 'name', item.label)
+      if (item.isAgent) name.append(element('small', '', 'subagente'))
+      row.append(element('span', 'mark', mark), name, element('span', 'time', span(item)))
+      if (item.detail) row.append(element('span', 'detail', item.detail))
+      return row
+    }))
+    document.getElementById('feedEmpty').hidden = items.length > 0
+  }
+
+  const setBusy = isBusy => {
+    const busy = document.getElementById('busy')
+    busy.classList.toggle('is-busy', isBusy)
+    busy.textContent = isBusy ? 'Claude está trabajando' : 'En espera'
+  }
+
+  events.addEventListener('hello', event => {
+    const hello = JSON.parse(event.data)
+    // A newer page came with the restarted server: load it.
+    if (build !== undefined && hello.build !== build) return location.reload()
+    build = hello.build
+    document.getElementById('cwd').textContent = hello.cwd
+    items = hello.items
+    setBusy(hello.isBusy)
+    draw()
+    drawUsage(hello.usage)
+  })
+  events.addEventListener('snapshot', event => {
+    items = JSON.parse(event.data).items
+    draw()
+  })
+  events.addEventListener('item', event => {
+    const { item } = JSON.parse(event.data)
+    const at = items.findIndex(one => one.id === item.id)
+    if (at >= 0) items[at] = item
+    else items.push(item)
+    draw()
+  })
+  events.addEventListener('status', event => setBusy(JSON.parse(event.data).isBusy))
+  events.addEventListener('usage', event => drawUsage(JSON.parse(event.data).usage))
+  events.addEventListener('notice', event => {
+    const notice = JSON.parse(event.data)
+    toast(notice.text, notice.isOk)
+    if (notice.isOk && isRequestPending) byId('request').value = ''
+    isRequestPending = false
+  })
+</script>
+</body>
+</html>

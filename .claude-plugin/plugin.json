@@ -1,0 +1,6 @@
+{
+  "name": "ventana",
+  "version": "0.1.0",
+  "description": "Ventana grafica al lado de la terminal: /ventana la abre",
+  "types": "./types/index.d.ts"
+}
