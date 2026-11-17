@@ -151,9 +151,34 @@
   .suggest .command { flex: none; font: 13px var(--mono); color: var(--text); }
   .suggest .what { color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .composer {
-    display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 16px;
+    display: flex; flex-direction: column; gap: 8px; padding: 10px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
   }
+  .composer .row { display: flex; align-items: flex-end; gap: 8px; }
+  .composer.is-drop, .is-dropping .composer { border-color: var(--accent); border-style: dashed; }
+  .attach-button {
+    flex: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer;
+    background: none; color: var(--dim); font-size: 20px; line-height: 1;
+  }
+  .attach-button:hover { color: var(--text); border-color: var(--dim); }
+  .tray { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tray[hidden] { display: none; }
+  .file {
+    display: flex; align-items: center; gap: 8px; max-width: 240px; padding: 4px 6px 4px 4px;
+    background: var(--raised); border-radius: 10px; font-size: 12.5px;
+  }
+  .file img, .file .icon {
+    flex: none; width: 36px; height: 36px; border-radius: 7px; object-fit: cover;
+    background: var(--bg); display: grid; place-items: center; color: var(--dim); font-size: 11px;
+  }
+  .file .label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file .label small { display: block; color: var(--dim); }
+  .file button { flex: none; background: none; border: 0; color: var(--dim); cursor: pointer; padding: 4px; font-size: 13px; }
+  .file.is-loading { opacity: 0.6; }
+  .message .files { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; white-space: normal; }
+  .message .text + .files { margin-top: 8px; }
+  .message .files img { max-width: 220px; max-height: 180px; border-radius: 10px; display: block; }
+  .message .files .file { background: var(--surface); }
   .composer:focus-within { border-color: var(--dim); }
   .composer textarea {
     flex: 1; border: 0; background: none; color: var(--text); font: 15px/1.5 var(--sans);
@@ -283,9 +308,14 @@
             <div class="end"><button class="button" id="addShortcut">Añadir atajo</button></div>
           </div>
           <ul class="suggest" id="suggest" role="listbox" aria-label="Comandos" hidden></ul>
-          <div class="composer">
-            <textarea id="request" rows="1" placeholder="Escríbele a Claude" aria-label="Mensaje para Claude"></textarea>
-            <button class="send-button" id="sendRequest" aria-label="Enviar" disabled>↑</button>
+          <div class="composer" id="composer">
+            <div class="tray" id="tray" hidden></div>
+            <div class="row">
+              <button class="attach-button" id="attachButton" aria-label="Adjuntar archivos" title="Adjuntar archivos">+</button>
+              <textarea id="request" rows="1" placeholder="Escríbele a Claude" aria-label="Mensaje para Claude"></textarea>
+              <button class="send-button" id="sendRequest" aria-label="Enviar" disabled>↑</button>
+            </div>
+            <input type="file" id="filePicker" multiple hidden>
           </div>
         </div>
       </div>
@@ -456,6 +486,83 @@
     return block
   }
 
+  // ---- Adjuntos: files go to the server, and the message names their paths.
+  const FILES_MARK = 'Archivos adjuntos:'
+  const fileUrl = path => `/file?t=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`
+  const isImagePath = path => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path)
+  const sizeOf = bytes => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  const kindOf = name => (name.split('.').pop() ?? '').slice(0, 4).toUpperCase() || 'DOC'
+
+  // A user message: its words, and the files it names shown as files.
+  const fillUser = (node, text) => {
+    const at = text.lastIndexOf(FILES_MARK)
+    const paths = at < 0 ? [] : text.slice(at + FILES_MARK.length).split('\n').map(line => line.replace(/^- /, '').trim()).filter(Boolean)
+    if (paths.length === 0 || !paths.every(path => path.startsWith('/'))) { node.textContent = text; return }
+    const words = text.slice(0, at).trim()
+    if (words !== '') node.append(element('div', 'text', words))
+    const files = element('div', 'files')
+    for (const path of paths) {
+      if (isImagePath(path)) {
+        const image = element('img')
+        image.src = fileUrl(path)
+        image.alt = path.split('/').pop()
+        files.append(image)
+      } else {
+        const chip = element('div', 'file')
+        chip.append(element('span', 'icon', kindOf(path)), element('span', 'label', path.split('/').pop().replace(/^\d{13}-/, '')))
+        files.append(chip)
+      }
+    }
+    node.append(files)
+  }
+
+  let attached = []
+  const drawTray = () => {
+    byId('tray').hidden = attached.length === 0
+    byId('tray').replaceChildren(...attached.map(file => {
+      const chip = element('div', `file ${file.path ? '' : 'is-loading'}`)
+      const thumb = file.path && file.isImage ? element('img') : element('span', 'icon', kindOf(file.name))
+      if (thumb.tagName === 'IMG') { thumb.src = fileUrl(file.path); thumb.alt = '' }
+      const label = element('span', 'label', file.name.replace(/^\d{13}-/, ''))
+      label.append(element('small', '', file.path ? sizeOf(file.size) : 'Subiendo'))
+      const remove = element('button', '', '✕')
+      remove.setAttribute('aria-label', `Quitar ${file.name}`)
+      remove.addEventListener('click', () => { attached = attached.filter(one => one !== file); drawTray(); fitRequest() })
+      chip.append(thumb, label, remove)
+      return chip
+    }))
+  }
+  const attach = async (pending, load) => {
+    attached.push(pending)
+    drawTray()
+    const answer = await load().catch(() => ({ error: 'red' }))
+    if (answer.error || !attached.includes(pending)) {
+      attached = attached.filter(one => one !== pending)
+      if (answer.error) toast(`No se pudo adjuntar ${pending.name}.`, false)
+    } else {
+      Object.assign(pending, answer.file)
+    }
+    drawTray()
+    fitRequest()
+  }
+  const attachFiles = files => {
+    for (const file of files) {
+      const name = file.name || `pegado.${(file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`
+      attach({ name }, async () => (await fetch(`/upload?name=${encodeURIComponent(name)}`, {
+        method: 'POST', headers: { 'x-ventana-token': token }, body: file,
+      })).json())
+    }
+  }
+  const attachPaths = paths => {
+    for (const path of paths) attach({ name: path.split('/').pop() }, () => api('/adopt', { path }))
+  }
+  // Files copied in a file manager arrive as a list of file:// addresses.
+  const pathsIn = text => {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    if (lines.length === 0 || !lines.every(line => line.startsWith('file://'))) return []
+    return lines.map(line => decodeURIComponent(new URL(line).pathname))
+  }
+
   let messages = []
   const drawChat = (toEnd = false) => {
     const thread = byId('thread')
@@ -467,7 +574,7 @@
       if (message.text !== '') {
         flush()
         const node = element('div', `message is-${message.role === 'user' ? 'user' : 'assistant'}`)
-        if (message.role === 'user') node.textContent = message.text
+        if (message.role === 'user') fillUser(node, message.text)
         else node.innerHTML = markdown(message.text)
         nodes.push(node)
       }
@@ -483,15 +590,57 @@
   const fitRequest = () => {
     request.style.height = 'auto'
     request.style.height = `${Math.min(180, request.scrollHeight)}px`
-    byId('sendRequest').disabled = request.value.trim() === ''
+    byId('sendRequest').disabled = (request.value.trim() === '' && attached.length === 0) || attached.some(file => !file.path)
   }
   const sendMessage = async () => {
-    const text = request.value
-    if (text.trim() === '') return
+    if (byId('sendRequest').disabled) return
+    const words = request.value
+    const files = attached
+    const text = files.length === 0 ? words
+      : `${words.trim()}\n\n${FILES_MARK}\n${files.map(file => `- ${file.path}`).join('\n')}`.trim()
     request.value = ''
+    attached = []
+    drawTray()
     fitRequest()
-    if (!(await sendToClaude(text))) { request.value = text; fitRequest() }
+    if (!(await sendToClaude(text))) { request.value = words; attached = files; drawTray(); fitRequest() }
   }
+  request.addEventListener('paste', event => {
+    const data = event.clipboardData
+    const files = [...(data?.files ?? [])]
+    const paths = files.length === 0 ? pathsIn(data?.getData('text/uri-list') || data?.getData('text/plain') || '') : []
+    if (files.length === 0 && paths.length === 0) return
+    event.preventDefault()
+    attachFiles(files)
+    attachPaths(paths)
+  })
+  byId('attachButton').addEventListener('click', () => byId('filePicker').click())
+  byId('filePicker').addEventListener('change', event => {
+    attachFiles([...event.target.files])
+    event.target.value = ''
+  })
+  // Dropped anywhere on the window; the page never navigates to the file.
+  let dragDepth = 0
+  const hasFiles = event => [...(event.dataTransfer?.types ?? [])].some(type => type === 'Files' || type === 'text/uri-list')
+  window.addEventListener('dragenter', event => {
+    if (!hasFiles(event)) return
+    dragDepth += 1
+    document.body.classList.add('is-dropping')
+  })
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) document.body.classList.remove('is-dropping')
+  })
+  window.addEventListener('dragover', event => { if (hasFiles(event)) event.preventDefault() })
+  window.addEventListener('drop', event => {
+    if (!hasFiles(event)) return
+    event.preventDefault()
+    dragDepth = 0
+    document.body.classList.remove('is-dropping')
+    const files = [...event.dataTransfer.files]
+    attachFiles(files)
+    if (files.length === 0) attachPaths(pathsIn(event.dataTransfer.getData('text/uri-list')))
+    byId('chat').hidden || request.focus()
+  })
   // ---- Command suggestions, as the terminal's prompt offers them
   let commands = []
   let offered = []

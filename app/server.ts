@@ -3,9 +3,9 @@
 // It listens on 127.0.0.1 only, and every request needs the session token.
 
 import { spawn } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -28,6 +28,40 @@ let usage: unknown = null
 type Message = { role: string; text: string }
 let messages: Message[] = []
 type Command = { name: string; description: string }
+
+// Files the person pastes or drops in the window are kept here, and the
+// message names their paths: Claude reads them with its own tools.
+const attachDir = join(
+  process.env.XDG_CACHE_HOME || join(homedir(), '.cache'),
+  'claude-ventana',
+  'adjuntos',
+)
+const ATTACH_MAX_BYTES = 512 * 1024 * 1024
+const ATTACH_KEEP_MS = 7 * 24 * 60 * 60 * 1000
+const IMAGE_TYPES = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']
+// What the page may read back for a thumbnail: these and the folder above.
+const adopted = new Set<string>()
+
+type Attachment = { path: string; name: string; size: number; isImage: boolean }
+
+const describeFile = (path: string): Attachment => ({
+  path,
+  name: basename(path),
+  size: statSync(path).size,
+  isImage: IMAGE_TYPES.includes(extname(path).toLowerCase()),
+})
+
+const sweepAttachments = () => {
+  try {
+    for (const name of readdirSync(attachDir)) {
+      const path = join(attachDir, name)
+      if (Date.now() - statSync(path).mtimeMs > ATTACH_KEEP_MS) unlinkSync(path)
+    }
+  } catch {
+    // Nothing kept yet.
+  }
+}
+sweepAttachments()
 let commands: Command[] = []
 
 // The terminal Claude runs in, hidden and shown through Hyprland: moved to a
@@ -354,6 +388,44 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     return json({})
   }
 
+  if (request.method === 'POST' && url.pathname === '/upload') {
+    const given = basename(url.searchParams.get('name') || 'archivo')
+    const safe = given.replace(/[^\p{L}\p{N}._ -]/gu, '_').slice(-80) || 'archivo'
+    mkdirSync(attachDir, { recursive: true })
+    const path = join(attachDir, `${Date.now()}-${safe}`)
+    await Bun.write(path, await request.arrayBuffer())
+
+    return json({ file: describeFile(path) })
+  }
+
+  // A file named by its path (copied in a file manager): used where it is.
+  if (request.method === 'POST' && url.pathname === '/adopt') {
+    const { path } = (await request.json()) as { path: unknown }
+    try {
+      const real = realpathSync(String(path))
+      if (!statSync(real).isFile()) return json({ error: 'file' }, 400)
+      adopted.add(real)
+
+      return json({ file: describeFile(real) })
+    } catch {
+      return json({ error: 'file' }, 400)
+    }
+  }
+
+  if (request.method === 'GET' && url.pathname === '/file') {
+    try {
+      const real = realpathSync(url.searchParams.get('path') ?? '')
+      const isKept = real.startsWith(`${realpathSync(attachDir)}/`)
+      if (!isKept && !adopted.has(real)) return json({ error: 'file' }, 403)
+
+      return new Response(Bun.file(real), {
+        headers: { 'cache-control': 'private, max-age=3600' },
+      })
+    } catch {
+      return json({ error: 'file' }, 404)
+    }
+  }
+
   if (request.method === 'POST' && url.pathname === '/send') {
     const { text } = (await request.json()) as { text: unknown }
     if (typeof text !== 'string' || text.trim() === '' || text.length > 20_000) {
@@ -414,6 +486,7 @@ const listen = async () => {
         hostname: '127.0.0.1',
         port: wantedPort,
         idleTimeout: 0,
+        maxRequestBodySize: ATTACH_MAX_BYTES,
         fetch: request => handle(request, server.port),
       })
 
