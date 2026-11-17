@@ -58,6 +58,8 @@ def main() -> int:
 
     view = QWebEngineView()
     view.setWindowTitle("Claude")
+    # The page names a pending question in its title: so does the window.
+    view.titleChanged.connect(view.setWindowTitle)
     view.resize(1040, 760)
     view.load(QUrl(url))
 

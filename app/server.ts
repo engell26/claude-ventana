@@ -29,6 +29,23 @@ type Message = { role: string; text: string }
 let messages: Message[] = []
 type Command = { name: string; description: string }
 
+// Permissions and questions waiting on the person, each holding the mod's
+// request open until it is answered here or handed to the terminal.
+type Ask = { id: string }
+type Answer = Record<string, unknown> | null
+const ASK_WAIT_MS = 5 * 60 * 1000
+const asks = new Map<string, { ask: Ask; settle: (answer: Answer) => void }>()
+
+const settleAsk = (id: string, answer: Answer) => {
+  const held = asks.get(id)
+  if (held === undefined) return false
+  asks.delete(id)
+  held.settle(answer)
+  broadcast('ask-done', { id })
+
+  return true
+}
+
 // Files the person pastes or drops in the window are kept here, and the
 // message names their paths: Claude reads them with its own tools.
 const attachDir = join(
@@ -280,6 +297,7 @@ const handle = async (request: Request, port: number): Promise<Response> => {
             messages,
             commands,
             terminal: readTerminal(),
+            asks: [...asks.values()].map(held => held.ask),
           }),
         )
       },
@@ -381,9 +399,52 @@ const handle = async (request: Request, port: number): Promise<Response> => {
 
   if (request.method === 'POST' && url.pathname === '/attention') {
     const { text } = (await request.json()) as { text: string }
-    // The answer is asked for in the terminal: bring it back.
-    setTerminal(false)
-    broadcast('notice', { isOk: false, text })
+    // The answer is asked for in the terminal: bring it back, unless the
+    // window is the one asking.
+    if (asks.size === 0) {
+      setTerminal(false)
+      broadcast('notice', { isOk: false, text })
+    }
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/ask') {
+    const { ask } = (await request.json()) as { ask: Ask }
+    // Nobody is looking at a window: the terminal asks.
+    if (clients.size === 0 || typeof ask?.id !== 'string') return json({ answer: null })
+    const answer = await new Promise<Answer>(resolve => {
+      const timer = setTimeout(() => {
+        if (settleAsk(ask.id, null)) {
+          setTerminal(false)
+          broadcast('notice', { isOk: false, text: 'Sin respuesta: la pregunta pasó a la terminal.' })
+        }
+      }, ASK_WAIT_MS)
+      asks.set(ask.id, {
+        ask,
+        settle: value => {
+          clearTimeout(timer)
+          resolve(value)
+        },
+      })
+      broadcast('ask', { ask })
+      // The mod gave up waiting (it reloaded, or the person interrupted).
+      request.signal.addEventListener('abort', () => settleAsk(ask.id, null))
+    })
+
+    return json({ answer })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/answer') {
+    const body = (await request.json()) as { id: string; answer: Answer; toTerminal?: boolean }
+    if (body.toTerminal === true) setTerminal(false)
+    const isSettled = settleAsk(body.id, body.toTerminal === true ? null : body.answer)
+
+    return json(isSettled ? {} : { error: 'gone' })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/ask-cancel') {
+    settleAsk(((await request.json()) as { id: string }).id, null)
 
     return json({})
   }

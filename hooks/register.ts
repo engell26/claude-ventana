@@ -31,6 +31,13 @@ const DETAIL_KEYS = [
   'path',
 ]
 
+type WindowAnswer = {
+  kind: 'allow' | 'deny'
+  isAlways?: boolean
+  answers?: Record<string, string>
+  message?: string
+}
+
 type ServerLine =
   | { type: 'ready'; port: number; token: string }
   | { type: 'bye' }
@@ -321,9 +328,6 @@ export const register: Register = on => {
       isAgent: typeof input.agentId === 'string',
     }
     await record($, item)
-    if (item.label === 'AskUserQuestion' || item.label === 'ExitPlanMode') {
-      attention($, 'Claude te hizo una pregunta: respóndela en la terminal.')
-    }
     // The call shows in the chat as it starts, a few seconds apart at most.
     if (!item.isAgent && item.startedAt - chatAt > CHAT_EVERY_MS) {
       chatAt = item.startedAt
@@ -345,11 +349,70 @@ export const register: Register = on => {
     return ran
   })
 
-  on('classic.PermissionRequest', ($, e, next) => {
-    attention($, `Claude pide permiso para usar ${e.tool_name}: respóndelo en la terminal.`)
+  // A permission or a question Claude puts to the person: asked in the
+  // window while one is open, and in the terminal's own dialog otherwise.
+  on('classic.PermissionRequest', async ($, e, next) => {
+    const below = await next(e)
+    if (below.decision !== undefined || current === undefined) return below
 
-    return next(e)
-  })
+    const input = (e.tool_input ?? {}) as Record<string, unknown>
+    const suggestions = e.permission_suggestions ?? []
+    const id = `ask-${await $.clock.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const cancel = () => post($, '/ask-cancel', { id })
+    next.signal.addEventListener('abort', cancel)
+    let answer: WindowAnswer | null = null
+    try {
+      // A call in flight does not count against the hook's time: the server
+      // holds it until the person answers, or gives up after a few minutes.
+      const held = await $.http.fetch(`http://127.0.0.1:${current.port}/ask`, {
+        method: 'POST',
+        headers: {
+          'x-ventana-token': current.token,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          ask: {
+            id,
+            tool: e.tool_name,
+            input,
+            detail: describe(input),
+            canRemember: suggestions.length > 0,
+            isAgent: e.agent_id !== undefined,
+          },
+        }),
+      })
+      answer = (JSON.parse(held.text) as { answer: WindowAnswer | null }).answer
+    } catch {
+      answer = null
+    } finally {
+      next.signal.removeEventListener('abort', cancel)
+    }
+    // No window, no answer in time, or "answer in the terminal": its dialog.
+    if (answer === null) return below
+
+    if (answer.kind === 'deny') {
+      return {
+        ...below,
+        decision: {
+          behavior: 'deny',
+          message: answer.message || 'La persona lo rechazó desde la ventana.',
+        },
+      }
+    }
+
+    return {
+      ...below,
+      decision: {
+        behavior: 'allow',
+        ...(answer.answers === undefined
+          ? {}
+          : { updatedInput: { ...input, answers: answer.answers } }),
+        ...(answer.isAlways === true && suggestions.length > 0
+          ? { updatedPermissions: suggestions }
+          : {}),
+      },
+    }
+  }).catch(($, e, next) => next(e))
 
   on('classic.Notification', ($, e, next) => {
     if (e.notification_type === 'permission_prompt') {
