@@ -29,9 +29,13 @@ def show_terminal() -> None:
                 ["hyprctl", *args], capture_output=True, text=True, timeout=5
             ).stdout
 
-        active = json.loads(hypr("activeworkspace", "-j"))["id"]
+        # The ordinary workspace in view, never the hidden one even when
+        # Hyprland shows it over the screen.
+        monitors = json.loads(hypr("monitors", "-j"))
+        monitor = next((one for one in monitors if one.get("focused")), monitors[0])
+        active = monitor["activeWorkspace"]["id"]
         for client in json.loads(hypr("clients", "-j")):
-            if str(client["pid"]) == pid and client["workspace"]["name"] == HIDDEN:
+            if client["workspace"]["name"] == HIDDEN:
                 address = client["address"]
                 # Hyprland's Lua dispatchers, then the older spelling.
                 hypr(
@@ -40,6 +44,11 @@ def show_terminal() -> None:
                     f" window = 'address:{address}' }})",
                 )
                 hypr("dispatch", "movetoworkspacesilent", f"{active},address:{address}")
+        # An empty hidden place left open darkens the whole screen.
+        monitors = json.loads(hypr("monitors", "-j"))
+        if any(one["specialWorkspace"]["name"] == HIDDEN for one in monitors):
+            name = HIDDEN.removeprefix("special:")
+            hypr("dispatch", f"hl.dsp.workspace.toggle_special('{name}')")
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         pass
 
@@ -56,7 +65,14 @@ def main() -> int:
     # The Wayland app id: a Hyprland rule matches `class:claude-ventana`.
     QGuiApplication.setDesktopFileName("claude-ventana")
 
-    view = QWebEngineView()
+    class View(QWebEngineView):
+        # The terminal comes back before this window goes, so Hyprland never
+        # hands the focus to it while it is still hidden.
+        def closeEvent(self, event):  # noqa: N802 (Qt's name)
+            show_terminal()
+            super().closeEvent(event)
+
+    view = View()
     view.setWindowTitle("Claude")
     # The page names a pending question in its title: so does the window.
     view.titleChanged.connect(view.setWindowTitle)

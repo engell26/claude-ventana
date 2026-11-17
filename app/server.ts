@@ -309,19 +309,59 @@ const readTerminal = (): Terminal => {
   }
 }
 
+// The ordinary workspace the person is looking at: never the hidden one,
+// even while Hyprland shows it over everything.
+const normalWorkspace = (): string => {
+  const monitors = JSON.parse(hypr(['monitors', '-j'])) as Array<{
+    focused: boolean
+    activeWorkspace: { id: number }
+  }>
+  const monitor = monitors.find(one => one.focused) ?? monitors[0]
+
+  return String(monitor?.activeWorkspace.id ?? 1)
+}
+
+const moveWindow = (address: string, target: string) => {
+  hypr(['dispatch', `hl.dsp.window.move({ workspace = '${target}', follow = false, window = 'address:${address}' })`])
+}
+
+// An empty hidden place left open darkens the whole screen: close it.
+const closeHidden = () => {
+  const monitors = JSON.parse(hypr(['monitors', '-j'])) as Array<{ specialWorkspace: { name: string } }>
+  if (monitors.some(one => one.specialWorkspace.name === HIDDEN)) {
+    hypr(['dispatch', `hl.dsp.workspace.toggle_special('${HIDDEN.replace('special:', '')}')`])
+  }
+}
+
+// Hyprland opened the hidden place over the screen (focus went to the
+// terminal there, or it asked for attention): everything in it comes back.
+const rescueHidden = () => {
+  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) return
+  try {
+    const monitors = JSON.parse(hypr(['monitors', '-j'])) as Array<{ specialWorkspace: { name: string } }>
+    if (!monitors.some(one => one.specialWorkspace.name === HIDDEN)) return
+    const target = normalWorkspace()
+    const clients = JSON.parse(hypr(['clients', '-j'])) as Array<{ address: string; workspace: { name: string } }>
+    for (const client of clients) {
+      if (client.workspace.name === HIDDEN) moveWindow(client.address, target)
+    }
+    closeHidden()
+    const now = readTerminal()
+    broadcast('terminal', { isSupported: now.isSupported, isHidden: now.isHidden })
+  } catch {
+    // Tried again next second.
+  }
+}
+
 const setTerminal = (isHidden: boolean): Terminal => {
   const found = readTerminal()
   if (found.address === undefined || found.isHidden === isHidden) return found
   try {
-    const target = isHidden
-      ? HIDDEN
-      : String((JSON.parse(hypr(['activeworkspace', '-j'])) as { id: number }).id)
+    const target = isHidden ? HIDDEN : normalWorkspace()
     // Hyprland's Lua dispatchers first; the older spelling where that one
     // did not move the window.
-    hypr([
-      'dispatch',
-      `hl.dsp.window.move({ workspace = '${target}', follow = false, window = 'address:${found.address}' })`,
-    ])
+    moveWindow(found.address, target)
+    if (!isHidden) closeHidden()
     if (readTerminal().isHidden !== isHidden) {
       hypr(['dispatch', 'movetoworkspacesilent', `${target},address:${found.address}`])
     }
@@ -818,6 +858,8 @@ const listen = async () => {
 
 const server = await listen()
 say({ type: 'ready', port: server.port, token })
+
+setInterval(rescueHidden, 1000)
 
 setInterval(() => {
   if (clients.size > 0) lastClientAt = Date.now()
