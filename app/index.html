@@ -28,9 +28,13 @@
     background: var(--bg);
     color: var(--text);
     font: 14px/1.5 var(--sans);
-    display: flex;
-    flex-direction: column;
     -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .app {
+    height: 100%; display: flex; flex-direction: column;
+    container: app / inline-size;
+    transition: margin-left 0.38s var(--ease);
   }
   ::selection { background: rgba(217, 119, 87, 0.35); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -41,30 +45,69 @@
   .top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 16px;
+    gap: 10px;
+    padding: 8px 16px 8px 10px;
     border-bottom: 1px solid var(--line);
   }
-  .top .chip { margin-left: auto; }
+  .icon-button {
+    position: relative; flex: none; width: 34px; height: 34px; display: grid; place-items: center;
+    background: none; border: 0; border-radius: 9px; color: var(--dim); cursor: pointer;
+  }
+  .icon-button:hover { background: var(--surface); color: var(--text); }
+  .icon-button svg { width: 18px; height: 18px; }
+  .icon-button .flag { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--off); display: none; }
+  .icon-button.is-low .flag { display: block; animation: pulse 1.6s ease-in-out infinite; }
+  .summary {
+    margin-left: auto; background: none; border: 1px solid transparent; border-radius: 999px; padding: 4px 10px;
+    color: var(--dim); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+  .summary:hover { color: var(--text); border-color: var(--line); }
+  .summary:empty { display: none; }
   .brand { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 17px; }
   .brand .spark { color: var(--accent); font-size: 18px; line-height: 1; }
   .status { display: flex; align-items: center; gap: 6px; color: var(--dim); font: 12px var(--sans); margin-left: 6px; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--off); }
   .is-on .dot { background: var(--ok); }
-  nav { display: flex; gap: 2px; background: var(--surface); padding: 3px; border-radius: 10px; }
-  nav button {
-    padding: 5px 14px;
-    background: none;
-    border: 0;
-    border-radius: 8px;
-    color: var(--dim);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
+  /* ---- side panel, slides in from the left */
+  :root { --drawer: 268px; }
+  .drawer {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 20; width: var(--drawer); max-width: 86vw;
+    display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 12px;
+    background: #1f1e1d; border-right: 1px solid var(--line); overflow-y: auto;
+    transform: translateX(-102%); transition: transform 0.38s var(--ease), box-shadow 0.38s;
   }
-  nav button:hover { color: var(--text); }
+  .is-drawer-open .drawer { transform: none; }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 0 0 6px 6px; }
+  .scrim {
+    position: fixed; inset: 0; z-index: 15; background: rgba(0, 0, 0, 0.45);
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  @media (max-width: 1099px) {
+    .is-drawer-open .drawer { box-shadow: 12px 0 40px rgba(0, 0, 0, 0.45); }
+    .is-drawer-open .scrim { opacity: 1; pointer-events: auto; }
+  }
+  @media (min-width: 1100px) {
+    .is-drawer-open .app { margin-left: var(--drawer); }
+  }
+  nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+  nav button {
+    position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 10px; background: none; border: 0; border-radius: 9px;
+    color: var(--dim); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  }
+  nav button svg { flex: none; width: 17px; height: 17px; }
+  nav button:hover { color: var(--text); background: var(--surface); }
   nav button[aria-selected="true"] { background: var(--raised); color: var(--text); }
+  nav button::before {
+    content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px;
+    background: var(--accent); transform: scaleY(0); transition: transform 0.3s var(--ease);
+  }
+  nav button[aria-selected="true"]::before { transform: scaleY(1); }
+  .drawer-group { padding: 12px 6px; border-top: 1px solid var(--line); }
+  .drawer-group[hidden] { display: none; }
+  .drawer-group h2 { margin-bottom: 10px; }
+  .drawer-foot { margin-top: auto; padding: 12px 6px 0; border-top: 1px solid var(--line); }
 
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   main > section { flex: 1; min-height: 0; }
@@ -192,25 +235,33 @@
   }
   .send-button:disabled { opacity: 0.4; cursor: default; }
 
-  /* what is left of the plan, and the pickers */
-  .left { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--dim); font-size: 12.5px; white-space: nowrap; }
+  /* what is left of the plan, and the pickers, inside the side panel */
   .left[hidden] { display: none; }
-  .left + .chip { margin-left: 0; }
-  .left .ring { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--line); display: inline-block; }
-  .left .ring b { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--ok) calc(var(--left, 0) * 1%), transparent 0); transition: --left 0.6s; }
-  .left .ring::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg); }
+  .left-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .left-head strong { display: block; font: 400 17px/1.3 var(--serif); }
+  .left-head small { color: var(--dim); font-size: 12px; }
+  .left .ring { position: relative; flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--line); display: inline-block; }
+  .left .ring b { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--ok) calc(var(--left, 0) * 1%), transparent 0); }
+  .left .ring::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #1f1e1d; }
   .left.is-low .ring b { background: conic-gradient(var(--off) calc(var(--left, 0) * 1%), transparent 0); }
-  .left.is-low { color: var(--off); }
-  .pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; font-size: 12.5px; color: var(--dim); }
-  .pickers[hidden] { display: none; }
-  .picker { display: inline-flex; align-items: center; gap: 6px; }
+  .left.is-low .left-head strong { color: var(--off); }
+  .left-row + .left-row { margin-top: 8px; }
+  .left-row .head { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+  .left-row .head span:last-child { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .left-row .meter { margin: 5px 0 2px; height: 5px; }
+  .left-row .meter i { background: var(--ok); }
+  .left-row.is-low .meter i { background: var(--off); }
+  .left-row .note { font-size: 11.5px; }
+  .picker { display: grid; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--dim); }
   .picker select {
-    background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
-    padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer;
+    width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 9px;
+    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
   }
   .picker select:hover { border-color: var(--dim); }
-  .pickers .now { margin-left: auto; }
+  .picker select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .button.is-wide { width: 100%; margin-bottom: 10px; }
   .check { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; }
+  .drawer .check { font-size: 13px; color: var(--dim); }
   .check input { accent-color: var(--accent); width: 16px; height: 16px; }
 
   /* sessions */
@@ -288,7 +339,7 @@
   .feed .name small { color: var(--dim); font-weight: 400; margin-left: 6px; }
   .feed .time { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
   .feed .detail { grid-column: 2 / 4; color: var(--dim); font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
-  @media (min-width: 900px) {
+  @container app (min-width: 900px) {
     .side { display: block; }
     .tools { display: none; }
   }
@@ -306,6 +357,8 @@
   .rows span:nth-child(odd) { color: var(--dim); }
   .limit + .limit { margin-top: 12px; }
   .limit .head { display: flex; justify-content: space-between; }
+  .limit .meter i { background: var(--ok); }
+  .limit.is-low .meter i { background: var(--off); }
   .plugin { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .plugin .name { font-weight: 600; overflow-wrap: anywhere; }
   .switch {
@@ -329,7 +382,7 @@
     width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 8px 12px; font: inherit; resize: vertical;
   }
-  .field:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible, .chip:focus-visible, .send-button:focus-visible {
+  .field:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible, .chip:focus-visible, .send-button:focus-visible, .icon-button:focus-visible, .summary:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 1px;
   }
 
@@ -400,6 +453,19 @@
   .button, .chip, .option, nav button, .switch { transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.12s; }
   .meter i { transition: width 0.9s var(--ease); }
   .message pre, .card { transition: border-color 0.2s; }
+  @keyframes from-left { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+  .drawer.is-opening > *, .drawer.is-opening nav button { animation: from-left 0.45s var(--ease) both; }
+  .drawer.is-opening > :nth-child(2) { animation: none; }
+  .drawer.is-opening nav button:nth-child(1) { animation-delay: 0.05s; }
+  .drawer.is-opening nav button:nth-child(2) { animation-delay: 0.09s; }
+  .drawer.is-opening nav button:nth-child(3) { animation-delay: 0.13s; }
+  .drawer.is-opening nav button:nth-child(4) { animation-delay: 0.17s; }
+  .drawer.is-opening > :nth-child(3) { animation-delay: 0.21s; }
+  .drawer.is-opening > :nth-child(4) { animation-delay: 0.26s; }
+  .drawer.is-opening > :nth-child(5) { animation-delay: 0.31s; }
+  .icon-button { transition: background 0.2s, color 0.2s; }
+  .icon-button svg { transition: transform 0.38s var(--ease); }
+  .is-drawer-open #openDrawer svg { transform: scaleX(-1); }
   @keyframes pulse { 50% { opacity: 0.3; } }
   @keyframes breathe { 50% { opacity: 0.45; transform: scale(0.88); } }
   @media (prefers-reduced-motion: reduce) {
@@ -408,19 +474,51 @@
 </style>
 </head>
 <body>
+<aside class="drawer" id="drawer" aria-label="Panel" inert>
+  <div class="drawer-head">
+    <div class="brand"><span class="spark">✳</span>Claude</div>
+    <button class="icon-button" id="closeDrawer" aria-label="Cerrar el panel" title="Cerrar el panel (Ctrl+B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path d="M16 10l-2 2 2 2"/></svg></button>
+  </div>
+  <nav role="tablist" aria-orientation="vertical">
+    <button role="tab" data-tab="chat" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-5 4v-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>Chat</button>
+    <button role="tab" data-tab="sesiones" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="14" height="12" rx="2"/><path d="M7 7V5h14v12h-4"/><path d="M6 12l2 2-2 2"/></svg>Sesiones</button>
+    <button role="tab" data-tab="uso" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Uso</button>
+    <button role="tab" data-tab="mods" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v6M13.5 16.5h6"/></svg>Mods</button>
+  </nav>
+  <div class="drawer-group" id="pickers" hidden>
+    <h2>Esta sesión</h2>
+    <label class="picker" title="Normal: te pregunta antes de cada acción.&#10;Aceptar ediciones: edita archivos sin preguntar.&#10;Planear: solo investiga y te propone un plan.&#10;Automático: un clasificador decide y casi no pregunta.&#10;No preguntar: rechaza lo que no esté permitido.">
+      <span>Modo</span>
+      <select id="modePicker" aria-label="Modo de permisos"></select>
+    </label>
+    <label class="picker" title="El modelo que responde">
+      <span>Modelo</span>
+      <select id="modelPicker" aria-label="Modelo"></select>
+    </label>
+    <p class="note" id="modeNow"></p>
+  </div>
+  <div class="drawer-group" id="terminalGroup" hidden>
+    <h2>Terminal</h2>
+    <button class="button is-wide" id="terminalButton">Ocultar terminal</button>
+    <label class="check"><input type="checkbox" id="prefHide"> Ocultarla al abrir la ventana</label>
+  </div>
+  <div class="drawer-foot">
+    <div class="left" id="leftPill" hidden>
+      <h2>Lo que te queda</h2>
+      <div class="left-head"><i class="ring"><b id="leftRing"></b></i><div><strong id="leftText"></strong><small id="leftSpan"></small></div></div>
+      <div id="leftList"></div>
+    </div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="app">
 <header class="top">
+  <button class="icon-button" id="openDrawer" aria-label="Abrir el panel" aria-controls="drawer" aria-expanded="false" title="Panel (Ctrl+B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path d="M14 10l2 2-2 2"/></svg><i class="flag"></i></button>
   <div class="brand">
     <span class="spark">✳</span>Claude
     <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
   </div>
-  <span class="left" id="leftPill" hidden title="Uso que te queda de tu plan"><i class="ring"><b id="leftRing"></b></i><span id="leftText"></span></span>
-  <button class="chip" id="terminalButton" hidden>Ocultar terminal</button>
-  <nav role="tablist">
-    <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
-    <button role="tab" data-tab="sesiones" aria-selected="false">Sesiones</button>
-    <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
-    <button role="tab" data-tab="mods" aria-selected="false">Mods</button>
-  </nav>
+  <button class="summary" id="summary" title="Modo y modelo: cámbialos en el panel"></button>
 </header>
 <main>
   <section id="chat">
@@ -448,17 +546,6 @@
             <div class="end"><button class="button" id="addShortcut">Añadir atajo</button></div>
           </div>
           <ul class="suggest" id="suggest" role="listbox" aria-label="Comandos" hidden></ul>
-          <div class="pickers" id="pickers" hidden>
-            <label class="picker" title="Normal: te pregunta antes de cada acción.&#10;Aceptar ediciones: edita archivos sin preguntar.&#10;Planear: solo investiga y te propone un plan.&#10;Automático: un clasificador decide y casi no pregunta.&#10;No preguntar: rechaza lo que no esté permitido.">
-              <span>Modo</span>
-              <select id="modePicker" aria-label="Modo de permisos"></select>
-            </label>
-            <label class="picker" title="El modelo que responde">
-              <span>Modelo</span>
-              <select id="modelPicker" aria-label="Modelo"></select>
-            </label>
-            <span class="now" id="modeNow"></span>
-          </div>
           <div class="composer" id="composer">
             <div class="tray" id="tray" hidden></div>
             <div class="row">
@@ -512,12 +599,7 @@
   </section>
   <section id="mods" class="page" hidden>
     <div class="inner">
-      <div class="card">
-        <h2>Ventana</h2>
-        <label class="check"><input type="checkbox" id="prefHide"> Ocultar la terminal al abrir la ventana</label>
-        <p class="note">La terminal vuelve sola cuando cierras la ventana o cuando algo solo se puede responder allá.</p>
-      </div>
-      <div class="bar spaced"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
+      <div class="bar"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
       <div class="card" id="applyCard" hidden>
         <p class="note">El cambio quedó guardado. Para aplicarlo en esta sesión hace falta <code>/reload-plugins</code>.</p>
         <div class="end"><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
@@ -528,6 +610,7 @@
 </main>
 <div class="toast" id="toast" role="status" hidden></div>
 <footer id="cwd">&nbsp;</footer>
+</div>
 <script>
   const token = new URLSearchParams(location.search).get('t') ?? ''
   const byId = id => document.getElementById(id)
@@ -544,8 +627,47 @@
     byId('status').textContent = isOn ? 'Conectado' : 'Desconectado'
   }
 
+  // ---- Side panel: pushes the page aside on a wide window, slides over it on a narrow one
+  const drawer = byId('drawer')
+  const wide = matchMedia('(min-width: 1100px)')
+  const remembered = () => { try { return localStorage.getItem('ventana.panel') === 'abierto' } catch { return false } }
+  const remember = isOpen => { try { localStorage.setItem('ventana.panel', isOpen ? 'abierto' : 'cerrado') } catch {} }
+  const isDrawerOpen = () => document.body.classList.contains('is-drawer-open')
+  const setDrawer = (isOpen, isByKey = false) => {
+    document.body.classList.toggle('is-drawer-open', isOpen)
+    drawer.inert = !isOpen
+    byId('openDrawer').setAttribute('aria-expanded', String(isOpen))
+    if (wide.matches) remember(isOpen)
+    if (isOpen) {
+      drawer.classList.remove('is-opening')
+      void drawer.offsetWidth
+      drawer.classList.add('is-opening')
+      if (isByKey && !wide.matches) drawer.querySelector('nav [aria-selected="true"]')?.focus({ preventScroll: true })
+    }
+  }
+  byId('openDrawer').addEventListener('click', () => setDrawer(!isDrawerOpen()))
+  byId('closeDrawer').addEventListener('click', () => { setDrawer(false); byId('openDrawer').focus() })
+  byId('summary').addEventListener('click', () => setDrawer(true))
+  byId('scrim').addEventListener('click', () => setDrawer(false))
+  wide.addEventListener('change', () => setDrawer(wide.matches && remembered()))
+  document.addEventListener('keydown', event => {
+    if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault()
+      setDrawer(!isDrawerOpen(), true)
+    } else if (event.key === 'Escape' && !event.defaultPrevented && isDrawerOpen() && !wide.matches) {
+      setDrawer(false)
+      byId('openDrawer').focus()
+    }
+  })
+  if (wide.matches && remembered()) {
+    document.body.classList.add('is-drawer-open')
+    drawer.inert = false
+    byId('openDrawer').setAttribute('aria-expanded', 'true')
+  }
+
   for (const tab of document.querySelectorAll('nav button')) {
     tab.addEventListener('click', () => {
+      if (!wide.matches && tab.closest('.drawer')) setDrawer(false)
       for (const other of document.querySelectorAll('nav button')) {
         other.setAttribute('aria-selected', String(other === tab))
       }
@@ -741,17 +863,37 @@
   }
 
   // ---- What is left of the plan: the tightest window, in the header
+  const leftOf = limit => Math.max(0, 100 - Math.round(limit.percentUsed))
   const drawLeft = limits => {
-    const pill = byId('leftPill')
-    if (limits.length === 0) { pill.hidden = true; return }
+    const box = byId('leftPill')
+    if (limits.length === 0) {
+      box.hidden = true
+      byId('openDrawer').classList.remove('is-low')
+      return
+    }
     const tightest = [...limits].sort((a, b) => b.percentUsed - a.percentUsed)[0]
-    const left = Math.max(0, 100 - Math.round(tightest.percentUsed))
-    pill.hidden = false
-    pill.classList.toggle('is-low', left <= 15)
+    const left = leftOf(tightest)
+    const isLow = left <= 15
+    box.hidden = false
+    box.classList.toggle('is-low', isLow)
+    byId('openDrawer').classList.toggle('is-low', isLow)
     byId('leftRing').style.setProperty('--left', String(left))
-    const span = { five_hour: '5 h', seven_day: '7 días', spend_limit: 'gasto' }[tightest.kind] ?? tightest.kind
-    byId('leftText').textContent = `Te queda ${left} % (${span})`
-    pill.title = limits.map(limit => `${LIMIT_NAMES[limit.kind] ?? limit.kind}: te queda ${Math.max(0, 100 - Math.round(limit.percentUsed))} %${limit.resetsAt ? `, se reinicia ${new Date(limit.resetsAt).toLocaleString('es')}` : ''}`).join('\n')
+    byId('leftText').textContent = `Te queda ${left} %`
+    const span = { five_hour: 'las 5 horas', seven_day: 'los 7 días', spend_limit: 'el límite de gasto' }[tightest.kind] ?? tightest.kind
+    byId('leftSpan').textContent = `de ${span}`
+    byId('leftList').replaceChildren(...limits.map(limit => {
+      const row = element('div', 'left-row')
+      row.classList.toggle('is-low', leftOf(limit) <= 15)
+      const head = element('div', 'head')
+      head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `${leftOf(limit)} %`))
+      const meter = element('div', 'meter')
+      const fill = element('i')
+      fill.style.width = `${leftOf(limit)}%`
+      meter.append(fill)
+      row.append(head, meter)
+      if (limit.resetsAt) row.append(element('p', 'note', `Se reinicia ${new Date(limit.resetsAt).toLocaleString('es', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`))
+      return row
+    }))
   }
 
   // ---- Mode and model pickers
@@ -786,6 +928,9 @@
     const picked = byId('modePicker').value
     byId('modeNow').textContent = sessionMode && sessionMode !== picked
       ? `Esta sesión va en: ${MODE_NAMES[sessionMode] ?? sessionMode}` : ''
+    const mode = sessionMode || picked
+    const model = byId('modelPicker').value
+    byId('summary').textContent = [mode && (MODE_NAMES[mode] ?? mode), model].filter(Boolean).join(' · ')
   }
   for (const id of ['modePicker', 'modelPicker']) {
     byId(id).addEventListener('change', async event => {
@@ -1193,6 +1338,7 @@
       event.preventDefault()
       take(chosen)
     } else if (isOpen && event.key === 'Escape') {
+      event.preventDefault()
       byId('suggest').hidden = true
     } else if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault()
@@ -1204,7 +1350,7 @@
   let terminal = { isSupported: false, isHidden: false }
   const drawTerminal = next => {
     terminal = next ?? terminal
-    byId('terminalButton').hidden = !terminal.isSupported
+    byId('terminalGroup').hidden = !terminal.isSupported
     byId('terminalButton').textContent = terminal.isHidden ? 'Mostrar terminal' : 'Ocultar terminal'
   }
   byId('terminalButton').addEventListener('click', async () => {
@@ -1323,10 +1469,11 @@
       byId('limits').replaceChildren(...usage.rateLimits.map(limit => {
         const box = element('div', 'limit')
         const head = element('div', 'head')
-        head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `te queda ${Math.max(0, 100 - Math.round(limit.percentUsed))} %`))
+        head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `te queda ${leftOf(limit)} %`))
+        box.classList.toggle('is-low', leftOf(limit) <= 15)
         const meter = element('div', 'meter')
         const fill = element('i')
-        fill.style.width = `${Math.min(100, limit.percentUsed)}%`
+        fill.style.width = `${leftOf(limit)}%`
         meter.append(fill)
         box.append(head, meter)
         if (limit.resetsAt) box.append(element('p', 'note', `Se reinicia: ${new Date(limit.resetsAt).toLocaleString('es')}`))

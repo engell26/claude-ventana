@@ -11,10 +11,11 @@ Escribe `/ventana` en una sesión para abrirla, o abre todo directo con el coman
 - **Actividad:** cada herramienta que usa Claude, en vivo. Con la ventana ancha sale como panel al lado del chat; con la ventana angosta sale dentro del chat, como en la terminal.
 - **Adjuntos:** pega imágenes o archivos con Ctrl+V, arrástralos a la ventana o usa el botón +. Se guardan en `~/.cache/claude-ventana/adjuntos` (se borran solos a los 7 días) y el mensaje le pasa a Claude su ruta para que los lea.
 - **Sugerencias de comandos:** al escribir `/` en el chat sale la lista de comandos disponibles, como en la terminal. Los comandos se ejecutan desde la ventana.
-- **Ocultar la terminal:** un botón esconde y muestra la terminal donde corre Claude (solo en Hyprland con kitty). La terminal vuelve sola cuando una pregunta pasa a la terminal y al cerrar la ventana.
+- **Ocultar la terminal:** un botón del panel esconde y muestra la terminal donde corre Claude (solo en Hyprland con kitty). La terminal vuelve sola cuando una pregunta pasa a la terminal y al cerrar la ventana.
 - **Sesiones:** las sesiones de Claude abiertas ahora y tus proyectos con sus conversaciones recientes. Desde ahí llevas al frente la terminal de una sesión abierta, retomas una conversación pasada o empiezas una nueva en cualquier proyecto; cada una se abre en su propia terminal de kitty.
-- **Modo y modelo:** encima de la caja de mensaje eliges el modo de permisos (Normal, Aceptar ediciones, Planear, Automático, No preguntar) y el modelo, igual que en `/config`.
-- **Lo que te queda:** arriba se ve cuánto te queda de tu plan en la ventana de uso más apretada.
+- **Panel lateral:** el botón de arriba a la izquierda (o Ctrl+B) desliza un panel con las pestañas, el modo y el modelo, la terminal y lo que te queda. Con la ventana ancha empuja el chat y recuerda si lo dejaste abierto; con la ventana angosta se pone encima y se cierra con Esc o tocando afuera.
+- **Modo y modelo:** en el panel eliges el modo de permisos (Normal, Aceptar ediciones, Planear, Automático, No preguntar) y el modelo, igual que en `/config`. Arriba a la derecha siempre se ve cuál va.
+- **Lo que te queda:** al pie del panel, cuánto te queda de cada ventana de uso y cuándo se reinicia. Si te queda 15 % o menos, el botón del panel muestra un punto rojo.
 - **Uso:** duración de la sesión, costo, modelo, llenado del contexto, límites de la cuenta y tokens del último turno.
 - **Mods:** tus plugins instalados con un interruptor para prenderlos y apagarlos. El cambio se aplica en la sesión con `/reload-plugins`.
 
@@ -51,7 +52,7 @@ ln -s ~/claude-ventana/lanzador/claude-ventana ~/.local/bin/claude-ventana
 cp ~/claude-ventana/lanzador/claude-ventana.desktop ~/.local/share/applications/
 ```
 
-En una terminal, `claude-ventana` corre Claude ahí mismo; desde el menú abre kitty con Claude adentro. Por defecto la terminal se oculta al abrir la ventana; se cambia en la pestaña Mods.
+En una terminal, `claude-ventana` corre Claude ahí mismo; desde el menú abre kitty con Claude adentro. Por defecto la terminal se oculta al abrir la ventana; se cambia en el panel lateral.
 
 ## Cómo funciona
 
