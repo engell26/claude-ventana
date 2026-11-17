@@ -29,18 +29,30 @@ type Message = { role: string; text: string }
 let messages: Message[] = []
 type Command = { name: string; description: string }
 
-// Permissions and questions waiting on the person, each holding the mod's
-// request open until it is answered here or handed to the terminal.
+// Permissions and questions waiting on the person. The mod polls for the
+// answer in short waits; an answer is kept until it collects it.
 type Ask = { id: string }
 type Answer = Record<string, unknown> | null
 const ASK_WAIT_MS = 5 * 60 * 1000
-const asks = new Map<string, { ask: Ask; settle: (answer: Answer) => void }>()
+const POLL_HOLD_MS = 8000
+const POLL_LOST_MS = 30_000
+type Held = {
+  ask: Ask
+  polledAt: number
+  timer: ReturnType<typeof setTimeout>
+  wake: Set<() => void>
+}
+const asks = new Map<string, Held>()
+const answered = new Map<string, Answer>()
 
 const settleAsk = (id: string, answer: Answer) => {
   const held = asks.get(id)
   if (held === undefined) return false
   asks.delete(id)
-  held.settle(answer)
+  clearTimeout(held.timer)
+  answered.set(id, answer)
+  setTimeout(() => answered.delete(id), 60_000)
+  for (const wake of held.wake) wake()
   broadcast('ask-done', { id })
 
   return true
@@ -412,27 +424,40 @@ const handle = async (request: Request, port: number): Promise<Response> => {
   if (request.method === 'POST' && url.pathname === '/ask') {
     const { ask } = (await request.json()) as { ask: Ask }
     // Nobody is looking at a window: the terminal asks.
-    if (clients.size === 0 || typeof ask?.id !== 'string') return json({ answer: null })
-    const answer = await new Promise<Answer>(resolve => {
-      const timer = setTimeout(() => {
-        if (settleAsk(ask.id, null)) {
-          setTerminal(false)
-          broadcast('notice', { isOk: false, text: 'Sin respuesta: la pregunta pasó a la terminal.' })
-        }
-      }, ASK_WAIT_MS)
-      asks.set(ask.id, {
-        ask,
-        settle: value => {
-          clearTimeout(timer)
-          resolve(value)
-        },
-      })
-      broadcast('ask', { ask })
-      // The mod gave up waiting (it reloaded, or the person interrupted).
-      request.signal.addEventListener('abort', () => settleAsk(ask.id, null))
-    })
+    if (clients.size === 0 || typeof ask?.id !== 'string') return json({ status: 'none' })
+    const timer = setTimeout(() => {
+      if (settleAsk(ask.id, null)) {
+        setTerminal(false)
+        broadcast('notice', { isOk: false, text: 'Sin respuesta: la pregunta pasó a la terminal.' })
+      }
+    }, ASK_WAIT_MS)
+    asks.set(ask.id, { ask, polledAt: Date.now(), timer, wake: new Set() })
+    broadcast('ask', { ask })
 
-    return json({ answer })
+    return json({ status: 'open' })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/ask-wait') {
+    const { id } = (await request.json()) as { id: string }
+    const held = asks.get(id)
+    if (held !== undefined) {
+      held.polledAt = Date.now()
+      await new Promise<void>(resolve => {
+        const done = () => {
+          clearTimeout(wait)
+          held.wake.delete(done)
+          resolve()
+        }
+        const wait = setTimeout(done, POLL_HOLD_MS)
+        held.wake.add(done)
+      })
+      held.polledAt = Date.now()
+    }
+    if (asks.has(id)) return json({ status: 'open' })
+    const answer = answered.get(id) ?? null
+    answered.delete(id)
+
+    return json({ status: 'done', answer })
   }
 
   if (request.method === 'POST' && url.pathname === '/answer') {
@@ -566,6 +591,10 @@ say({ type: 'ready', port: server.port, token })
 
 setInterval(() => {
   if (clients.size > 0) lastClientAt = Date.now()
+  // A question whose mod stopped asking for the answer is closed.
+  for (const [id, held] of asks) {
+    if (Date.now() - held.polledAt > POLL_LOST_MS) settleAsk(id, null)
+  }
   broadcast('ping', {})
   const isOrphan = process.ppid !== parent
   const isIdle = clients.size === 0 && Date.now() - lastClientAt > IDLE_EXIT_MS

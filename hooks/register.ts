@@ -64,6 +64,19 @@ function post($: EngineInterface, path: string, body: object): void {
     .catch(() => {})
 }
 
+// One request to the server, its JSON answer; rejects while none runs.
+async function call($: EngineInterface, path: string, body: object): Promise<unknown> {
+  if (current === undefined) throw new Error('no server')
+  const response = await $.http.fetch(`http://127.0.0.1:${current.port}${path}`, {
+    method: 'POST',
+    headers: { 'x-ventana-token': current.token, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(`status ${response.status}`)
+
+  return JSON.parse(response.text) as unknown
+}
+
 // Keeps the row and shows it; never throws, so no hook fails over it.
 async function record($: EngineInterface, item: Item): Promise<void> {
   try {
@@ -362,26 +375,35 @@ export const register: Register = on => {
     next.signal.addEventListener('abort', cancel)
     let answer: WindowAnswer | null = null
     try {
-      // A call in flight does not count against the hook's time: the server
-      // holds it until the person answers, or gives up after a few minutes.
-      const held = await $.http.fetch(`http://127.0.0.1:${current.port}/ask`, {
-        method: 'POST',
-        headers: {
-          'x-ventana-token': current.token,
-          'content-type': 'application/json',
+      const opened = (await call($, '/ask', {
+        ask: {
+          id,
+          tool: e.tool_name,
+          input,
+          detail: describe(input),
+          canRemember: suggestions.length > 0,
+          isAgent: e.agent_id !== undefined,
         },
-        body: JSON.stringify({
-          ask: {
-            id,
-            tool: e.tool_name,
-            input,
-            detail: describe(input),
-            canRemember: suggestions.length > 0,
-            isAgent: e.agent_id !== undefined,
-          },
-        }),
-      })
-      answer = (JSON.parse(held.text) as { answer: WindowAnswer | null }).answer
+      })) as { status: string }
+      // Waits in short polls: a call in flight does not count against the
+      // hook's time, and none is held open long enough for the host to cut.
+      let failures = opened.status === 'open' ? 0 : 3
+      while (failures < 3 && !next.signal.aborted) {
+        try {
+          const polled = (await call($, '/ask-wait', { id })) as {
+            status: string
+            answer?: WindowAnswer | null
+          }
+          failures = 0
+          if (polled.status === 'done') {
+            answer = polled.answer ?? null
+            break
+          }
+        } catch {
+          failures += 1
+        }
+      }
+      if (failures >= 3) cancel()
     } catch {
       answer = null
     } finally {
