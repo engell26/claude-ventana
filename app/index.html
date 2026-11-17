@@ -6,14 +6,20 @@
 <title>Claude</title>
 <style>
   :root {
-    --bg: #17161a;
-    --panel: #201f24;
-    --line: #34323a;
-    --text: #ecebef;
-    --dim: #9a97a3;
+    --bg: #262624;
+    --surface: #30302e;
+    --raised: #3a3a37;
+    --line: #45443f;
+    --text: #f3f1ea;
+    --dim: #a8a59b;
     --accent: #d97757;
-    --ok: #6fbf8b;
-    --off: #c9665c;
+    --on-accent: #1f1410;
+    --ok: #7fbf93;
+    --off: #d4776b;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --mono: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+    --column: 740px;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -21,85 +27,169 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 14px/1.5 system-ui, sans-serif;
+    font: 14px/1.5 var(--sans);
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
   }
-  header {
+  ::selection { background: rgba(217, 119, 87, 0.35); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---- top bar */
+  .top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
+    gap: 12px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--line);
   }
-  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
-  h1 span { color: var(--accent); }
-  .status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); }
+  .brand { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 17px; }
+  .brand .spark { color: var(--accent); font-size: 18px; line-height: 1; }
+  .status { display: flex; align-items: center; gap: 6px; color: var(--dim); font: 12px var(--sans); margin-left: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--off); }
   .is-on .dot { background: var(--ok); }
-  nav { display: flex; border-bottom: 1px solid var(--line); }
+  nav { display: flex; gap: 2px; background: var(--surface); padding: 3px; border-radius: 10px; }
   nav button {
-    flex: 1;
-    padding: 10px 4px;
+    padding: 5px 14px;
     background: none;
     border: 0;
-    border-bottom: 2px solid transparent;
+    border-radius: 8px;
     color: var(--dim);
     font: inherit;
     font-size: 13px;
     cursor: pointer;
   }
   nav button:hover { color: var(--text); }
-  nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
-  main { flex: 1; overflow-y: auto; padding: 16px; }
-  section[hidden] { display: none; }
-  .empty {
-    margin-top: 48px;
-    text-align: center;
-    color: var(--dim);
+  nav button[aria-selected="true"] { background: var(--raised); color: var(--text); }
+
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  main > section { flex: 1; min-height: 0; }
+  main > section[hidden] { display: none; }
+  .page { overflow-y: auto; padding: 20px 16px; }
+  .page > .inner { max-width: var(--column); margin: 0 auto; }
+
+  /* ---- chat */
+  #chat { display: flex; }
+  .conversation { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .thread { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 16px 8px; }
+  .thread > .inner { max-width: var(--column); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .message { overflow-wrap: anywhere; }
+  .message.is-user {
+    align-self: flex-end;
+    max-width: 85%;
+    background: var(--raised);
+    padding: 10px 16px;
+    border-radius: 18px;
+    white-space: pre-wrap;
   }
-  .empty strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 4px; }
+  .message.is-assistant { font: 15.5px/1.65 var(--serif); }
+  .message p { margin: 0 0 12px; }
+  .message > :last-child { margin-bottom: 0; }
+  .message h3 { margin: 18px 0 8px; font: 600 16px/1.4 var(--serif); }
+  .message > h3:first-child { margin-top: 0; }
+  .message ul, .message ol { margin: 0 0 12px; padding-left: 24px; }
+  .message li { margin-bottom: 4px; }
+  .message code { font: 13px/1.4 var(--mono); background: var(--surface); padding: 2px 5px; border-radius: 5px; }
+  .message pre {
+    margin: 0 0 12px; padding: 12px 14px; background: #1f1e1d; border: 1px solid var(--line);
+    border-radius: 10px; overflow-x: auto;
+  }
+  .message pre code { padding: 0; background: none; }
+  .message .scroll { overflow-x: auto; margin: 0 0 12px; }
+  .message table { border-collapse: collapse; font: 13.5px/1.5 var(--sans); }
+  .message th, .message td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .message th { color: var(--dim); font-weight: 600; }
+
+  /* tool calls, in the flow of the chat (narrow window) */
+  .tools { display: flex; flex-direction: column; gap: 2px; font: 12.5px/1.5 var(--sans); color: var(--dim); }
+  .tools summary { cursor: pointer; padding: 2px 0; list-style: none; }
+  .tools summary::before { content: '▸ '; }
+  .tools details[open] summary::before { content: '▾ '; }
+  .tool { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .tool .mark { flex: none; width: 12px; color: var(--ok); }
+  .tool.is-running .mark { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+  .tool.is-error .mark { color: var(--off); }
+  .tool .name { flex: none; color: var(--text); font-weight: 600; }
+  .tool .detail { font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .typing { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+  .typing .spark { color: var(--accent); font-size: 18px; animation: breathe 1.6s ease-in-out infinite; }
+  .typing[hidden] { display: none; }
+  .welcome { margin: auto; text-align: center; padding: 40px 16px; }
+  .welcome .spark { color: var(--accent); font-size: 34px; }
+  .welcome h1 { margin: 8px 0 4px; font: 400 26px/1.3 var(--serif); }
+  .welcome p { margin: 0; color: var(--dim); }
+  .welcome[hidden] { display: none; }
+
+  .dock { padding: 4px 16px 14px; }
+  .dock > .inner { max-width: var(--column); margin: 0 auto; }
+  .shortcut-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .shortcuts { display: flex; gap: 6px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+  .shortcuts::-webkit-scrollbar { display: none; }
+  .chip-wrap { display: inline-flex; align-items: center; flex: none; }
+  .chip {
+    flex: none; background: none; color: var(--dim); border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { color: var(--text); border-color: var(--dim); }
+  .chip.is-plain { border-color: transparent; padding: 4px 8px; }
+  .adder { display: grid; gap: 8px; margin-bottom: 10px; }
+  .adder[hidden] { display: none; }
+  .composer {
+    display: flex; align-items: flex-end; gap: 8px; padding: 10px 10px 10px 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  }
+  .composer:focus-within { border-color: var(--dim); }
+  .composer textarea {
+    flex: 1; border: 0; background: none; color: var(--text); font: 15px/1.5 var(--sans);
+    resize: none; outline: none; padding: 5px 0; max-height: 180px;
+  }
+  .composer textarea::placeholder, .field::placeholder { color: var(--dim); }
+  .send-button {
+    flex: none; width: 34px; height: 34px; border-radius: 10px; border: 0; cursor: pointer;
+    background: var(--accent); color: var(--on-accent); font-size: 18px; line-height: 1;
+  }
+  .send-button:disabled { opacity: 0.4; cursor: default; }
+
+  /* activity panel, beside the chat (wide window) */
+  .side { display: none; width: 320px; flex: none; border-left: 1px solid var(--line); overflow-y: auto; padding: 16px; }
   .busy { color: var(--dim); font-size: 12px; margin: 0 0 12px; }
   .busy.is-busy { color: var(--accent); }
   ol.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .feed li {
-    display: grid;
-    grid-template-columns: 16px 1fr auto;
-    gap: 2px 8px;
-    padding: 8px 10px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    display: grid; grid-template-columns: 14px 1fr auto; gap: 1px 8px; padding: 8px 10px;
+    background: var(--surface); border-radius: 10px; font-size: 13px;
   }
   .feed .mark { color: var(--ok); }
   .feed .is-running .mark { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
   .feed .is-error .mark { color: var(--off); }
-  .feed .is-prompt { border-color: var(--accent); }
+  .feed .is-prompt { background: none; border: 1px solid var(--line); }
   .feed .is-prompt .mark { color: var(--accent); }
   .feed .name { font-weight: 600; }
   .feed .name small { color: var(--dim); font-weight: 400; margin-left: 6px; }
   .feed .time { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .feed .detail {
-    grid-column: 2 / 4;
-    color: var(--dim);
-    font: 12px/1.4 ui-monospace, monospace;
-    overflow-wrap: anywhere;
+  .feed .detail { grid-column: 2 / 4; color: var(--dim); font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+  @media (min-width: 900px) {
+    .side { display: block; }
+    .tools { display: none; }
   }
-  @keyframes pulse { 50% { opacity: 0.3; } }
-  @media (prefers-reduced-motion: reduce) { .feed .is-running .mark { animation: none; } }
+
+  /* ---- Uso and Mods */
   h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .card { background: var(--surface); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .pair .card { margin-bottom: 10px; }
-  .big { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .big.is-small { font-size: 14px; }
+  .big { font: 400 24px/1.3 var(--serif); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .big.is-small { font-size: 16px; }
   .meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
   .meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
-  .note { color: var(--dim); font-size: 12px; margin: 0; }
+  .note { color: var(--dim); font-size: 12.5px; margin: 0; }
   .rows { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
   .rows span:nth-child(odd) { color: var(--dim); }
   .limit + .limit { margin-top: 12px; }
-  .limit header { display: flex; justify-content: space-between; padding: 0; border: 0; }
+  .limit .head { display: flex; justify-content: space-between; }
   .plugin { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .plugin .name { font-weight: 600; overflow-wrap: anywhere; }
   .switch {
@@ -112,129 +202,131 @@
   .switch:disabled { opacity: 0.5; cursor: progress; }
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .bar h2 { margin: 0; }
+  .end { display: flex; justify-content: flex-end; margin-top: 10px; }
   .button {
-    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
-    padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+    background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer;
   }
   .button:hover { border-color: var(--dim); }
-  .button.is-main { background: var(--accent); border-color: var(--accent); color: #1b1410; font-weight: 600; }
-  .button.is-quiet { border-color: transparent; background: none; color: var(--dim); padding: 6px; }
-  textarea, input[type="text"] {
-    width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 10px; font: inherit; resize: vertical;
+  .button.is-main { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .field {
+    width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 12px; font: inherit; resize: vertical;
   }
-  textarea:focus, input[type="text"]:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible {
+  .field:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible, .chip:focus-visible, .send-button:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 1px;
   }
-  .send { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 20px; }
-  .shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
-  .shortcuts .chip { display: inline-flex; align-items: center; }
-  .shortcuts .remove { margin-left: 2px; }
-  .adder { display: grid; gap: 8px; margin-top: 12px; }
-  .adder[hidden] { display: none; }
+
   .toast {
-    position: fixed; left: 16px; right: 16px; bottom: 44px; padding: 10px 12px; border-radius: 8px;
-    background: var(--panel); border: 1px solid var(--ok); font-size: 13px;
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px; max-width: calc(100% - 32px);
+    padding: 10px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--ok); font-size: 13px;
   }
   .toast.is-bad { border-color: var(--off); }
   .toast[hidden] { display: none; }
-  #chat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-  #chat[hidden] { display: none; }
-  .messages { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
-  .messages[hidden] { display: none; }
-  .message { max-width: 92%; padding: 8px 12px; border-radius: 12px; overflow-wrap: anywhere; }
-  .message.is-user { align-self: flex-end; background: var(--accent); color: #1b1410; border-bottom-right-radius: 4px; white-space: pre-wrap; }
-  .message.is-assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
-  .message p { margin: 0 0 8px; }
-  .message > :last-child { margin-bottom: 0; }
-  .message h3 { margin: 10px 0 6px; font-size: 14px; }
-  .message ul, .message ol { margin: 0 0 8px; padding-left: 20px; }
-  .message code { font: 12px/1.4 ui-monospace, monospace; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
-  .message pre { margin: 0 0 8px; padding: 8px; background: var(--bg); border-radius: 6px; overflow-x: auto; }
-  .message pre code { padding: 0; background: none; }
-  .typing { margin: 0 0 8px; color: var(--accent); font-size: 12px; }
-  .typing[hidden] { display: none; }
-  #chat .bar { margin-bottom: 8px; align-items: flex-start; }
-  .composer { display: flex; gap: 8px; align-items: flex-end; }
-  .composer textarea { flex: 1; resize: none; }
   footer {
-    padding: 8px 16px;
-    border-top: 1px solid var(--line);
-    color: var(--dim);
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 5px 16px; border-top: 1px solid var(--line); color: var(--dim); font: 11.5px var(--mono);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  @keyframes breathe { 50% { opacity: 0.45; transform: scale(0.88); } }
+  @media (prefers-reduced-motion: reduce) {
+    .tool.is-running .mark, .feed .is-running .mark, .typing .spark { animation: none; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1><span>✳</span> Claude</h1>
-  <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
+<header class="top">
+  <div class="brand">
+    <span class="spark">✳</span>Claude
+    <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
+  </div>
+  <nav role="tablist">
+    <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+    <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
+    <button role="tab" data-tab="mods" aria-selected="false">Mods</button>
+  </nav>
 </header>
-<nav role="tablist">
-  <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
-  <button role="tab" data-tab="actividad" aria-selected="false">Actividad</button>
-  <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
-  <button role="tab" data-tab="mods" aria-selected="false">Mods</button>
-</nav>
 <main>
   <section id="chat">
-    <div class="messages" id="messages"></div>
-    <p class="empty" id="chatEmpty"><strong>Sin mensajes todavía</strong>Escribe abajo para hablar con Claude.</p>
-    <p class="typing" id="typing" hidden>Claude está trabajando</p>
-    <div class="bar"><div class="shortcuts" id="shortcuts"></div><button class="button is-quiet" id="editShortcuts">Atajos</button></div>
-    <div class="adder" id="adder" hidden>
-      <input type="text" id="newLabel" maxlength="40" placeholder="Nombre del atajo">
-      <textarea id="newText" rows="2" placeholder="Texto que le manda a Claude"></textarea>
-      <div class="send"><span></span><button class="button" id="addShortcut">Añadir atajo</button></div>
+    <div class="conversation">
+      <div class="thread" id="thread">
+        <div class="welcome" id="welcome">
+          <div class="spark">✳</div>
+          <h1>¿En qué trabajamos?</h1>
+          <p>Escribe abajo; también puedes seguir en la terminal.</p>
+        </div>
+        <div class="inner" id="messages"></div>
+      </div>
+      <div class="dock">
+        <div class="inner">
+          <div class="typing" id="typing" hidden><span class="spark">✳</span>Claude está trabajando</div>
+          <div class="shortcut-row">
+            <div class="shortcuts" id="shortcuts"></div>
+            <button class="chip is-plain" id="editShortcuts">Atajos</button>
+          </div>
+          <div class="adder" id="adder" hidden>
+            <input class="field" type="text" id="newLabel" maxlength="40" placeholder="Nombre del atajo">
+            <textarea class="field" id="newText" rows="2" placeholder="Texto que le manda a Claude"></textarea>
+            <div class="end"><button class="button" id="addShortcut">Añadir atajo</button></div>
+          </div>
+          <div class="composer">
+            <textarea id="request" rows="1" placeholder="Escríbele a Claude" aria-label="Mensaje para Claude"></textarea>
+            <button class="send-button" id="sendRequest" aria-label="Enviar" disabled>↑</button>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="composer">
-      <textarea id="request" rows="2" placeholder="Escríbele a Claude (Enter envía, Shift+Enter salta de línea)"></textarea>
-      <button class="button is-main" id="sendRequest">Enviar</button>
+    <aside class="side" aria-label="Actividad">
+      <h2>Actividad</h2>
+      <p class="busy" id="busy">En espera</p>
+      <ol class="feed" id="feed"></ol>
+      <p class="note" id="feedEmpty">Aquí aparece cada herramienta que use Claude.</p>
+    </aside>
+  </section>
+  <section id="uso" class="page" hidden>
+    <div class="inner">
+      <div class="pair">
+        <div class="card"><h2>Sesión</h2><div class="big" id="uptime">—</div></div>
+        <div class="card"><h2>Costo</h2><div class="big" id="cost">—</div></div>
+      </div>
+      <div class="card"><h2>Modelo</h2><div class="big is-small" id="model">—</div></div>
+      <div class="card">
+        <h2>Contexto</h2>
+        <div class="big" id="contextPercent">—</div>
+        <div class="meter"><i id="contextMeter" style="width:0"></i></div>
+        <p class="note" id="contextNote">Sin datos todavía.</p>
+      </div>
+      <div class="card"><h2>Límites de la cuenta</h2><div id="limits"><p class="note">Sin lecturas todavía.</p></div></div>
+      <div class="card"><h2>Último turno</h2><div class="rows" id="turn"><p class="note">Aparece al terminar un turno.</p></div></div>
     </div>
   </section>
-  <section id="actividad" hidden>
-    <p class="busy" id="busy">En espera</p>
-    <ol class="feed" id="feed"></ol>
-    <p class="empty" id="feedEmpty"><strong>Sin actividad todavía</strong>Aquí aparece cada herramienta que use Claude.</p>
-  </section>
-  <section id="uso" hidden>
-    <div class="pair">
-      <div class="card"><h2>Sesión</h2><div class="big" id="uptime">—</div></div>
-      <div class="card"><h2>Costo</h2><div class="big" id="cost">—</div></div>
-    </div>
-    <div class="card"><h2>Modelo</h2><div class="big is-small" id="model">—</div></div>
-    <div class="card">
-      <h2>Contexto</h2>
-      <div class="big" id="contextPercent">—</div>
-      <div class="meter"><i id="contextMeter" style="width:0"></i></div>
-      <p class="note" id="contextNote">Sin datos todavía.</p>
-    </div>
-    <div class="card"><h2>Límites de la cuenta</h2><div id="limits"><p class="note">Sin lecturas todavía.</p></div></div>
-    <div class="card"><h2>Último turno</h2><div class="rows" id="turn"><p class="note">Aparece al terminar un turno.</p></div></div>
-  </section>
-  <section id="mods" hidden>
-    <div class="bar"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
-    <div id="plugins"><p class="note">Cargando.</p></div>
-    <div class="card" id="applyCard" hidden>
-      <p class="note">El cambio quedó guardado. Para aplicarlo en esta sesión hace falta <code>/reload-plugins</code>.</p>
-      <div class="send"><span></span><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
+  <section id="mods" class="page" hidden>
+    <div class="inner">
+      <div class="bar"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
+      <div class="card" id="applyCard" hidden>
+        <p class="note">El cambio quedó guardado. Para aplicarlo en esta sesión hace falta <code>/reload-plugins</code>.</p>
+        <div class="end"><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
+      </div>
+      <div id="plugins"><p class="note">Cargando.</p></div>
     </div>
   </section>
-
 </main>
 <div class="toast" id="toast" role="status" hidden></div>
 <footer id="cwd">&nbsp;</footer>
 <script>
   const token = new URLSearchParams(location.search).get('t') ?? ''
-  const statusBox = document.getElementById('statusBox')
-  const status = document.getElementById('status')
+  const byId = id => document.getElementById(id)
+
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag)
+    if (className) node.className = className
+    if (text !== undefined) node.textContent = text
+    return node
+  }
 
   const setConnected = isOn => {
-    statusBox.classList.toggle('is-on', isOn)
-    status.textContent = isOn ? 'Conectado' : 'Desconectado'
+    byId('statusBox').classList.toggle('is-on', isOn)
+    byId('status').textContent = isOn ? 'Conectado' : 'Desconectado'
   }
 
   for (const tab of document.querySelectorAll('nav button')) {
@@ -242,18 +334,11 @@
       for (const other of document.querySelectorAll('nav button')) {
         other.setAttribute('aria-selected', String(other === tab))
       }
-      for (const section of document.querySelectorAll('main section')) {
+      for (const section of document.querySelectorAll('main > section')) {
         section.hidden = section.id !== tab.dataset.tab
       }
     })
   }
-
-  // EventSource retries by itself, which is what brings the window back
-  // after the mod reloads and the server restarts on the same port.
-  const events = new EventSource(`/events?t=${encodeURIComponent(token)}`)
-  events.onopen = () => setConnected(true)
-  events.onerror = () => setConnected(false)
-  const byId = id => document.getElementById(id)
 
   const api = async (path, body) => {
     const response = await fetch(path, {
@@ -274,7 +359,7 @@
     toastTimer = setTimeout(() => { node.hidden = true }, 5000)
   }
 
-  const sendToPrompt = async text => {
+  const sendToClaude = async text => {
     if (text.trim() === '') return false
     const sent = await api('/send', { text }).catch(() => ({ error: 'red' }))
     if (sent.error) toast('No se pudo enviar: la sesión no responde.', false)
@@ -286,19 +371,34 @@
   const inline = text => escape(text)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim())
+  const tableOf = lines => {
+    const rows = lines.filter(line => !/^\s*\|?[\s:|-]+\|?\s*$/.test(line)).map(cells)
+    const [head, ...body] = rows
+    if (head === undefined) return ''
+    return '<div class="scroll"><table><thead><tr>'
+      + head.map(cell => `<th>${inline(cell)}</th>`).join('')
+      + '</tr></thead><tbody>'
+      + body.map(row => `<tr>${row.map(cell => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('')
+      + '</tbody></table></div>'
+  }
   // A small Markdown reader: every piece is escaped before it becomes HTML.
   const markdown = text => {
     const out = []
     let list = null
     let code = null
+    let table = null
     const endList = () => { if (list) { out.push(`</${list}>`); list = null } }
+    const endTable = () => { if (table) { out.push(tableOf(table)); table = null } }
     for (const line of text.split('\n')) {
       if (code !== null) {
         if (line.trim().startsWith('```')) { out.push(`<pre><code>${escape(code.join('\n'))}</code></pre>`); code = null }
         else code.push(line)
         continue
       }
-      if (line.trim().startsWith('```')) { endList(); code = []; continue }
+      if (line.trim().startsWith('```')) { endList(); endTable(); code = []; continue }
+      if (line.trim().startsWith('|')) { endList(); (table ??= []).push(line); continue }
+      endTable()
       const bullet = /^\s*[-*] (.*)$/.exec(line)
       const numbered = /^\s*\d+\. (.*)$/.exec(line)
       const heading = /^#{1,6} (.*)$/.exec(line)
@@ -314,44 +414,159 @@
     }
     if (code !== null) out.push(`<pre><code>${escape(code.join('\n'))}</code></pre>`)
     endList()
+    endTable()
     return out.join('')
   }
 
+  const toolRow = tool => {
+    const state = !tool.isDone ? 'is-running' : tool.isError ? 'is-error' : ''
+    const row = element('div', `tool ${state}`)
+    row.append(
+      element('span', 'mark', !tool.isDone ? '●' : tool.isError ? '✕' : '✓'),
+      element('span', 'name', tool.name),
+      element('span', 'detail', tool.detail),
+    )
+    return row
+  }
+  // Many finished calls fold into one line, as the terminal folds them.
+  const toolBlock = tools => {
+    const block = element('div', 'tools')
+    const isSettled = tools.every(tool => tool.isDone)
+    if (tools.length > 3 && isSettled) {
+      const fold = element('details')
+      fold.append(element('summary', '', `${tools.length} herramientas usadas`), ...tools.map(toolRow))
+      block.append(fold)
+    } else {
+      block.append(...tools.map(toolRow))
+    }
+    return block
+  }
+
   let messages = []
-  const drawChat = () => {
-    const box = byId('messages')
-    const isAtEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60
-    box.replaceChildren(...messages.map(message => {
-      const node = document.createElement('div')
-      node.className = `message is-${message.role === 'user' ? 'user' : 'assistant'}`
-      if (message.role === 'user') node.textContent = message.text
-      else node.innerHTML = markdown(message.text)
-      return node
+  const drawChat = (toEnd = false) => {
+    const thread = byId('thread')
+    const isAtEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80
+    const nodes = []
+    let run = []
+    const flush = () => { if (run.length > 0) { nodes.push(toolBlock(run)); run = [] } }
+    for (const message of messages) {
+      if (message.text !== '') {
+        flush()
+        const node = element('div', `message is-${message.role === 'user' ? 'user' : 'assistant'}`)
+        if (message.role === 'user') node.textContent = message.text
+        else node.innerHTML = markdown(message.text)
+        nodes.push(node)
+      }
+      run.push(...(message.tools ?? []))
+    }
+    flush()
+    byId('messages').replaceChildren(...nodes)
+    byId('welcome').hidden = nodes.length > 0
+    if (toEnd || isAtEnd) thread.scrollTop = thread.scrollHeight
+  }
+
+  const request = byId('request')
+  const fitRequest = () => {
+    request.style.height = 'auto'
+    request.style.height = `${Math.min(180, request.scrollHeight)}px`
+    byId('sendRequest').disabled = request.value.trim() === ''
+  }
+  const sendMessage = async () => {
+    const text = request.value
+    if (text.trim() === '') return
+    request.value = ''
+    fitRequest()
+    if (!(await sendToClaude(text))) { request.value = text; fitRequest() }
+  }
+  request.addEventListener('input', fitRequest)
+  request.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault()
+      sendMessage()
+    }
+  })
+  byId('sendRequest').addEventListener('click', sendMessage)
+
+  // ---- Atajos
+  let shortcuts = []
+  let isEditing = false
+  const saveShortcuts = async next => {
+    const answer = await api('/shortcuts', { shortcuts: next }).catch(() => ({ error: 'red' }))
+    if (answer.error) return toast('No se pudo guardar el atajo.', false)
+    shortcuts = answer.shortcuts
+    drawShortcuts()
+  }
+  const drawShortcuts = () => {
+    byId('shortcuts').replaceChildren(...shortcuts.map((shortcut, at) => {
+      const wrap = element('span', 'chip-wrap')
+      const run = element('button', 'chip', shortcut.label)
+      run.title = shortcut.text
+      run.addEventListener('click', () => sendToClaude(shortcut.text))
+      wrap.append(run)
+      if (isEditing) {
+        const remove = element('button', 'chip is-plain', '✕')
+        remove.setAttribute('aria-label', `Quitar ${shortcut.label}`)
+        remove.addEventListener('click', () => saveShortcuts(shortcuts.filter((_, other) => other !== at)))
+        wrap.append(remove)
+      }
+      return wrap
     }))
-    byId('chatEmpty').hidden = messages.length > 0
-    byId('messages').hidden = messages.length === 0
-    if (isAtEnd) box.scrollTop = box.scrollHeight
+  }
+  byId('editShortcuts').addEventListener('click', () => {
+    isEditing = !isEditing
+    byId('editShortcuts').textContent = isEditing ? 'Listo' : 'Atajos'
+    byId('adder').hidden = !isEditing
+    drawShortcuts()
+  })
+  byId('addShortcut').addEventListener('click', async () => {
+    const label = byId('newLabel').value.trim()
+    const text = byId('newText').value.trim()
+    if (label === '' || text === '') return toast('El atajo necesita nombre y texto.', false)
+    await saveShortcuts([...shortcuts, { label, text }])
+    byId('newLabel').value = ''
+    byId('newText').value = ''
+  })
+  api('/shortcuts').then(answer => { shortcuts = answer.shortcuts ?? []; drawShortcuts() }).catch(() => {})
+
+  // ---- Actividad
+  let items = []
+  const span = item => {
+    if (item.endedAt === undefined) return 'en curso'
+    if (item.kind === 'prompt') return new Date(item.startedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+    const ms = item.endedAt - item.startedAt
+    return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
+  }
+  const drawFeed = () => {
+    byId('feed').replaceChildren(...[...items].reverse().map(item => {
+      const isRunning = item.endedAt === undefined
+      const state = item.kind === 'prompt' ? 'is-prompt'
+        : isRunning ? 'is-running' : item.isError ? 'is-error' : ''
+      const row = element('li', state)
+      const mark = item.kind === 'prompt' ? '›' : isRunning ? '●' : item.isError ? '✕' : '✓'
+      const name = element('span', 'name', item.kind === 'prompt' ? 'Tú' : item.label)
+      if (item.isAgent) name.append(element('small', '', 'subagente'))
+      row.append(element('span', 'mark', mark), name, element('span', 'time', span(item)))
+      if (item.detail) row.append(element('span', 'detail', item.detail))
+      return row
+    }))
+    byId('feedEmpty').hidden = items.length > 0
+  }
+  const setBusy = isBusy => {
+    byId('busy').classList.toggle('is-busy', isBusy)
+    byId('busy').textContent = isBusy ? 'Claude está trabajando' : 'En espera'
+    byId('typing').hidden = !isBusy
   }
 
   // ---- Uso
   const count = number => new Intl.NumberFormat('es').format(number)
   const LIMIT_NAMES = { five_hour: 'Ventana de 5 horas', seven_day: 'Ventana de 7 días', spend_limit: 'Límite de gasto' }
   let startedAt
-
   const drawUptime = () => {
     if (startedAt === undefined) return
     const minutes = Math.max(0, Math.floor((Date.now() - startedAt) / 60000))
     byId('uptime').textContent = minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`
   }
   setInterval(drawUptime, 15000)
-
-  const element0 = (tag, className, text) => {
-    const node = document.createElement(tag)
-    if (className) node.className = className
-    if (text !== undefined) node.textContent = text
-    return node
-  }
-
   const drawUsage = usage => {
     if (!usage) return
     startedAt = usage.startedAt
@@ -365,18 +580,17 @@
     byId('contextNote').textContent = context.tokens === undefined
       ? `Ventana de ${count(context.window ?? 0)} tokens.`
       : `${count(context.tokens)} de ${count(context.window)} tokens.`
-    const limits = byId('limits')
     if ((usage.rateLimits ?? []).length > 0) {
-      limits.replaceChildren(...usage.rateLimits.map(limit => {
-        const box = element0('div', 'limit')
-        const head = element0('header')
-        head.append(element0('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element0('span', '', `${Math.round(limit.percentUsed)} %`))
-        const meter = element0('div', 'meter')
-        const fill = element0('i')
+      byId('limits').replaceChildren(...usage.rateLimits.map(limit => {
+        const box = element('div', 'limit')
+        const head = element('div', 'head')
+        head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `${Math.round(limit.percentUsed)} %`))
+        const meter = element('div', 'meter')
+        const fill = element('i')
         fill.style.width = `${Math.min(100, limit.percentUsed)}%`
         meter.append(fill)
         box.append(head, meter)
-        if (limit.resetsAt) box.append(element0('p', 'note', `Se reinicia: ${new Date(limit.resetsAt).toLocaleString('es')}`))
+        if (limit.resetsAt) box.append(element('p', 'note', `Se reinicia: ${new Date(limit.resetsAt).toLocaleString('es')}`))
         return box
       }))
     }
@@ -386,7 +600,7 @@
         ['Entrada', turn.input_tokens], ['Salida', turn.output_tokens],
         ['Leídos de caché', turn.cache_read_input_tokens], ['Escritos en caché', turn.cache_creation_input_tokens],
       ]
-      byId('turn').replaceChildren(...rows.flatMap(([name, value]) => [element0('span', '', name), element0('span', '', `${count(value ?? 0)} tokens`)]))
+      byId('turn').replaceChildren(...rows.flatMap(([name, value]) => [element('span', '', name), element('span', '', `${count(value ?? 0)} tokens`)]))
     }
   }
 
@@ -395,10 +609,10 @@
   const drawPlugins = plugins => {
     byId('plugins').replaceChildren(...plugins.map(plugin => {
       const [name, market] = plugin.id.split('@')
-      const card = element0('div', 'card plugin')
-      const text = element0('div')
-      text.append(element0('div', 'name', name), element0('p', 'note', [market, plugin.version].filter(Boolean).join(' · ')))
-      const toggle = element0('button', 'switch')
+      const card = element('div', 'card plugin')
+      const text = element('div')
+      text.append(element('div', 'name', name), element('p', 'note', [market, plugin.version].filter(Boolean).join(' · ')))
+      const toggle = element('button', 'switch')
       toggle.setAttribute('role', 'switch')
       toggle.setAttribute('aria-checked', String(plugin.enabled))
       toggle.setAttribute('aria-label', `${plugin.enabled ? 'Apagar' : 'Prender'} ${name}`)
@@ -410,7 +624,7 @@
   }
   const loadPlugins = async () => {
     const answer = await api('/plugins').catch(error => ({ error: String(error) }))
-    if (answer.error) byId('plugins').replaceChildren(element0('p', 'note', `No pude leer los plugins: ${answer.error}`))
+    if (answer.error) byId('plugins').replaceChildren(element('p', 'note', `No pude leer los plugins: ${answer.error}`))
     else drawPlugins(answer.plugins)
   }
   const togglePlugin = async plugin => {
@@ -428,131 +642,38 @@
     else toast(answer.message || 'El cambio no se aplicó.', false)
   }
   byId('reloadPlugins').addEventListener('click', loadPlugins)
-  byId('applyButton').addEventListener('click', () => sendToPrompt('/reload-plugins'))
+  byId('applyButton').addEventListener('click', () => sendToClaude('/reload-plugins'))
   loadPlugins()
 
-  // ---- Pedidos
-  let shortcuts = []
-  let isEditing = false
-  const saveShortcuts = async next => {
-    const answer = await api('/shortcuts', { shortcuts: next }).catch(() => ({ error: 'red' }))
-    if (answer.error) return toast('No se pudo guardar el atajo.', false)
-    shortcuts = answer.shortcuts
-    drawShortcuts()
-  }
-  const drawShortcuts = () => {
-    byId('shortcuts').replaceChildren(...shortcuts.map((shortcut, at) => {
-      const chip = element0('span', 'chip')
-      const run = element0('button', 'button', shortcut.label)
-      run.title = shortcut.text
-      run.addEventListener('click', () => sendToPrompt(shortcut.text))
-      chip.append(run)
-      if (isEditing) {
-        const remove = element0('button', 'button is-quiet remove', '✕')
-        remove.setAttribute('aria-label', `Quitar ${shortcut.label}`)
-        remove.addEventListener('click', () => saveShortcuts(shortcuts.filter((_, other) => other !== at)))
-        chip.append(remove)
-      }
-      return chip
-    }))
-  }
-  byId('editShortcuts').addEventListener('click', () => {
-    isEditing = !isEditing
-    byId('editShortcuts').textContent = isEditing ? 'Listo' : 'Atajos'
-    byId('adder').hidden = !isEditing
-    drawShortcuts()
-  })
-  byId('addShortcut').addEventListener('click', async () => {
-    const label = byId('newLabel').value.trim()
-    const text = byId('newText').value.trim()
-    if (label === '' || text === '') return toast('El atajo necesita nombre y texto.', false)
-    await saveShortcuts([...shortcuts, { label, text }])
-    byId('newLabel').value = ''
-    byId('newText').value = ''
-  })
-  const sendMessage = async () => {
-    const box = byId('request')
-    const text = box.value
-    if (text.trim() === '') return
-    box.value = ''
-    if (!(await sendToPrompt(text))) box.value = text
-  }
-  byId('request').addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-      event.preventDefault()
-      sendMessage()
-    }
-  })
-  byId('sendRequest').addEventListener('click', async () => {
-    await sendMessage()
-  })
-  api('/shortcuts').then(answer => { shortcuts = answer.shortcuts ?? []; drawShortcuts() }).catch(() => {})
-
-  let items = []
+  // ---- The session's events. EventSource retries by itself, which is what
+  // brings the window back after the mod reloads and the server restarts.
   let build
-
-  const span = (item) => {
-    if (item.endedAt === undefined) return 'en curso'
-    const ms = item.endedAt - item.startedAt
-    if (item.kind === 'prompt') return new Date(item.startedAt).toLocaleTimeString()
-    return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
-  }
-
-  const element = (tag, className, text) => {
-    const node = document.createElement(tag)
-    if (className) node.className = className
-    if (text !== undefined) node.textContent = text
-    return node
-  }
-
-  const draw = () => {
-    const feed = document.getElementById('feed')
-    feed.replaceChildren(...[...items].reverse().map(item => {
-      const isRunning = item.endedAt === undefined
-      const state = item.kind === 'prompt' ? 'is-prompt'
-        : isRunning ? 'is-running' : item.isError ? 'is-error' : ''
-      const row = element('li', state)
-      const mark = item.kind === 'prompt' ? '›' : isRunning ? '●' : item.isError ? '✕' : '✓'
-      const name = element('span', 'name', item.label)
-      if (item.isAgent) name.append(element('small', '', 'subagente'))
-      row.append(element('span', 'mark', mark), name, element('span', 'time', span(item)))
-      if (item.detail) row.append(element('span', 'detail', item.detail))
-      return row
-    }))
-    document.getElementById('feedEmpty').hidden = items.length > 0
-  }
-
-  const setBusy = isBusy => {
-    const busy = document.getElementById('busy')
-    busy.classList.toggle('is-busy', isBusy)
-    busy.textContent = isBusy ? 'Claude está trabajando' : 'En espera'
-    byId('typing').hidden = !isBusy
-  }
-
+  const events = new EventSource(`/events?t=${encodeURIComponent(token)}`)
+  events.onopen = () => setConnected(true)
+  events.onerror = () => setConnected(false)
   events.addEventListener('hello', event => {
     const hello = JSON.parse(event.data)
     // A newer page came with the restarted server: load it.
     if (build !== undefined && hello.build !== build) return location.reload()
     build = hello.build
-    document.getElementById('cwd').textContent = hello.cwd
+    byId('cwd').textContent = hello.cwd
     items = hello.items
-    setBusy(hello.isBusy)
-    draw()
-    drawUsage(hello.usage)
     messages = hello.messages ?? []
-    drawChat()
-    byId('messages').scrollTop = byId('messages').scrollHeight
+    setBusy(hello.isBusy)
+    drawFeed()
+    drawUsage(hello.usage)
+    drawChat(true)
   })
   events.addEventListener('snapshot', event => {
     items = JSON.parse(event.data).items
-    draw()
+    drawFeed()
   })
   events.addEventListener('item', event => {
     const { item } = JSON.parse(event.data)
     const at = items.findIndex(one => one.id === item.id)
     if (at >= 0) items[at] = item
     else items.push(item)
-    draw()
+    drawFeed()
   })
   events.addEventListener('status', event => setBusy(JSON.parse(event.data).isBusy))
   events.addEventListener('chat', event => {

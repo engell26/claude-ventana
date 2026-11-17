@@ -7,7 +7,7 @@ Escribe `/ventana` en una sesión para abrirla.
 ## Qué tiene
 
 - **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal; los comandos con `/` quedan en el prompt de la terminal para que des Enter. Incluye atajos editables. Los permisos y las preguntas con opciones se siguen contestando en la terminal.
-- **Actividad:** cada herramienta que usa Claude, en vivo, con cuánto tardó y si falló, y tus pedidos intercalados.
+- **Actividad:** cada herramienta que usa Claude, en vivo. Con la ventana ancha sale como panel al lado del chat; con la ventana angosta sale dentro del chat, como en la terminal.
 - **Uso:** duración de la sesión, costo, modelo, llenado del contexto, límites de la cuenta y tokens del último turno.
 - **Mods:** tus plugins instalados con un interruptor para prenderlos y apagarlos. El cambio se aplica en la sesión con `/reload-plugins`.
 

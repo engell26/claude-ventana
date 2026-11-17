@@ -27,7 +27,7 @@ def main() -> int:
 
     view = QWebEngineView()
     view.setWindowTitle("Claude")
-    view.resize(460, 720)
+    view.resize(1040, 760)
     view.load(QUrl(url))
 
     if is_test:

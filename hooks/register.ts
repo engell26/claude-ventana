@@ -18,7 +18,7 @@ const READY_TIMEOUT_MS = 6000
 const FEED_ROWS = 100
 const CHAT_ROWS = 80
 const CHAT_TEXT = 30000
-const CHAT_EVERY_MS = 5000
+const CHAT_EVERY_MS = 2500
 const DETAIL_KEYS = [
   'file_path',
   'description',
@@ -106,11 +106,21 @@ async function chat($: EngineInterface): Promise<void> {
   if (current === undefined) return
   try {
     const rows = await $.session.messages()
+    // Each row with the tool calls made in it, in the transcript's order.
     const messages = rows
-      .map(row => ({ role: row.role, text: words(row.role, row.text) }))
-      .filter(row => row.text !== '')
+      .map(row => ({
+        role: row.role,
+        text: words(row.role, row.text).slice(0, CHAT_TEXT),
+        tools: row.toolUses.map(use => ({
+          id: use.tool_use_id,
+          name: use.tool,
+          detail: describe(use.input),
+          isDone: use.text !== undefined || use.result !== undefined,
+          isError: use.isError === true,
+        })),
+      }))
+      .filter(row => row.text !== '' || row.tools.length > 0)
       .slice(-CHAT_ROWS)
-      .map(row => ({ role: row.role, text: row.text.slice(0, CHAT_TEXT) }))
     post($, '/chat', { messages })
   } catch {
     // The tab keeps the rows it has.
@@ -258,7 +268,7 @@ export const register: Register = on => {
       const said = words('user', e.text)
       if (said !== '') {
         post($, '/chat-add', {
-          message: { role: 'user', text: said.slice(0, CHAT_TEXT) },
+          message: { role: 'user', text: said.slice(0, CHAT_TEXT), tools: [] },
         })
       }
     }
@@ -277,6 +287,11 @@ export const register: Register = on => {
       isAgent: typeof input.agentId === 'string',
     }
     await record($, item)
+    // The call shows in the chat as it starts, a few seconds apart at most.
+    if (!item.isAgent && item.startedAt - chatAt > CHAT_EVERY_MS) {
+      chatAt = item.startedAt
+      void chat($)
+    }
     const ran = await next(e)
     const endedAt = await $.clock.now().catch(() => item.startedAt)
     await record($, {
