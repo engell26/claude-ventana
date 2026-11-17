@@ -138,6 +138,25 @@
   }
   .toast.is-bad { border-color: var(--off); }
   .toast[hidden] { display: none; }
+  #chat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  #chat[hidden] { display: none; }
+  .messages { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
+  .messages[hidden] { display: none; }
+  .message { max-width: 92%; padding: 8px 12px; border-radius: 12px; overflow-wrap: anywhere; }
+  .message.is-user { align-self: flex-end; background: var(--accent); color: #1b1410; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+  .message.is-assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .message p { margin: 0 0 8px; }
+  .message > :last-child { margin-bottom: 0; }
+  .message h3 { margin: 10px 0 6px; font-size: 14px; }
+  .message ul, .message ol { margin: 0 0 8px; padding-left: 20px; }
+  .message code { font: 12px/1.4 ui-monospace, monospace; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+  .message pre { margin: 0 0 8px; padding: 8px; background: var(--bg); border-radius: 6px; overflow-x: auto; }
+  .message pre code { padding: 0; background: none; }
+  .typing { margin: 0 0 8px; color: var(--accent); font-size: 12px; }
+  .typing[hidden] { display: none; }
+  #chat .bar { margin-bottom: 8px; align-items: flex-start; }
+  .composer { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea { flex: 1; resize: none; }
   footer {
     padding: 8px 16px;
     border-top: 1px solid var(--line);
@@ -155,13 +174,28 @@
   <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
 </header>
 <nav role="tablist">
-  <button role="tab" data-tab="actividad" aria-selected="true">Actividad</button>
+  <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+  <button role="tab" data-tab="actividad" aria-selected="false">Actividad</button>
   <button role="tab" data-tab="uso" aria-selected="false">Uso</button>
   <button role="tab" data-tab="mods" aria-selected="false">Mods</button>
-  <button role="tab" data-tab="pedidos" aria-selected="false">Pedidos</button>
 </nav>
 <main>
-  <section id="actividad">
+  <section id="chat">
+    <div class="messages" id="messages"></div>
+    <p class="empty" id="chatEmpty"><strong>Sin mensajes todavía</strong>Escribe abajo para hablar con Claude.</p>
+    <p class="typing" id="typing" hidden>Claude está trabajando</p>
+    <div class="bar"><div class="shortcuts" id="shortcuts"></div><button class="button is-quiet" id="editShortcuts">Atajos</button></div>
+    <div class="adder" id="adder" hidden>
+      <input type="text" id="newLabel" maxlength="40" placeholder="Nombre del atajo">
+      <textarea id="newText" rows="2" placeholder="Texto que le manda a Claude"></textarea>
+      <div class="send"><span></span><button class="button" id="addShortcut">Añadir atajo</button></div>
+    </div>
+    <div class="composer">
+      <textarea id="request" rows="2" placeholder="Escríbele a Claude (Enter envía, Shift+Enter salta de línea)"></textarea>
+      <button class="button is-main" id="sendRequest">Enviar</button>
+    </div>
+  </section>
+  <section id="actividad" hidden>
     <p class="busy" id="busy">En espera</p>
     <ol class="feed" id="feed"></ol>
     <p class="empty" id="feedEmpty"><strong>Sin actividad todavía</strong>Aquí aparece cada herramienta que use Claude.</p>
@@ -189,21 +223,7 @@
       <div class="send"><span></span><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
     </div>
   </section>
-  <section id="pedidos" hidden>
-    <h2>Pedido</h2>
-    <textarea id="request" rows="5" placeholder="Escribe lo que quieres pedirle a Claude"></textarea>
-    <div class="send">
-      <p class="note">Llega al prompt de la terminal; tú das Enter.</p>
-      <button class="button is-main" id="sendRequest">Enviar al prompt</button>
-    </div>
-    <div class="bar"><h2>Atajos</h2><button class="button" id="editShortcuts">Editar</button></div>
-    <div class="shortcuts" id="shortcuts"></div>
-    <div class="adder" id="adder" hidden>
-      <input type="text" id="newLabel" maxlength="40" placeholder="Nombre del atajo">
-      <textarea id="newText" rows="3" placeholder="Texto que manda al prompt"></textarea>
-      <div class="send"><span></span><button class="button" id="addShortcut">Añadir atajo</button></div>
-    </div>
-  </section>
+
 </main>
 <div class="toast" id="toast" role="status" hidden></div>
 <footer id="cwd">&nbsp;</footer>
@@ -255,9 +275,62 @@
   }
 
   const sendToPrompt = async text => {
-    if (text.trim() === '') return
-    const sent = await api('/fill', { text }).catch(() => ({ error: 'red' }))
+    if (text.trim() === '') return false
+    const sent = await api('/send', { text }).catch(() => ({ error: 'red' }))
     if (sent.error) toast('No se pudo enviar: la sesión no responde.', false)
+    return !sent.error
+  }
+
+  // ---- Chat
+  const escape = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const inline = text => escape(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  // A small Markdown reader: every piece is escaped before it becomes HTML.
+  const markdown = text => {
+    const out = []
+    let list = null
+    let code = null
+    const endList = () => { if (list) { out.push(`</${list}>`); list = null } }
+    for (const line of text.split('\n')) {
+      if (code !== null) {
+        if (line.trim().startsWith('```')) { out.push(`<pre><code>${escape(code.join('\n'))}</code></pre>`); code = null }
+        else code.push(line)
+        continue
+      }
+      if (line.trim().startsWith('```')) { endList(); code = []; continue }
+      const bullet = /^\s*[-*] (.*)$/.exec(line)
+      const numbered = /^\s*\d+\. (.*)$/.exec(line)
+      const heading = /^#{1,6} (.*)$/.exec(line)
+      if (bullet || numbered) {
+        const kind = bullet ? 'ul' : 'ol'
+        if (list !== kind) { endList(); out.push(`<${kind}>`); list = kind }
+        out.push(`<li>${inline((bullet ?? numbered)[1])}</li>`)
+        continue
+      }
+      endList()
+      if (heading) out.push(`<h3>${inline(heading[1])}</h3>`)
+      else if (line.trim() !== '') out.push(`<p>${inline(line)}</p>`)
+    }
+    if (code !== null) out.push(`<pre><code>${escape(code.join('\n'))}</code></pre>`)
+    endList()
+    return out.join('')
+  }
+
+  let messages = []
+  const drawChat = () => {
+    const box = byId('messages')
+    const isAtEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60
+    box.replaceChildren(...messages.map(message => {
+      const node = document.createElement('div')
+      node.className = `message is-${message.role === 'user' ? 'user' : 'assistant'}`
+      if (message.role === 'user') node.textContent = message.text
+      else node.innerHTML = markdown(message.text)
+      return node
+    }))
+    byId('chatEmpty').hidden = messages.length > 0
+    byId('messages').hidden = messages.length === 0
+    if (isAtEnd) box.scrollTop = box.scrollHeight
   }
 
   // ---- Uso
@@ -385,7 +458,7 @@
   }
   byId('editShortcuts').addEventListener('click', () => {
     isEditing = !isEditing
-    byId('editShortcuts').textContent = isEditing ? 'Listo' : 'Editar'
+    byId('editShortcuts').textContent = isEditing ? 'Listo' : 'Atajos'
     byId('adder').hidden = !isEditing
     drawShortcuts()
   })
@@ -397,10 +470,21 @@
     byId('newLabel').value = ''
     byId('newText').value = ''
   })
-  let isRequestPending = false
+  const sendMessage = async () => {
+    const box = byId('request')
+    const text = box.value
+    if (text.trim() === '') return
+    box.value = ''
+    if (!(await sendToPrompt(text))) box.value = text
+  }
+  byId('request').addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault()
+      sendMessage()
+    }
+  })
   byId('sendRequest').addEventListener('click', async () => {
-    isRequestPending = true
-    await sendToPrompt(byId('request').value)
+    await sendMessage()
   })
   api('/shortcuts').then(answer => { shortcuts = answer.shortcuts ?? []; drawShortcuts() }).catch(() => {})
 
@@ -442,6 +526,7 @@
     const busy = document.getElementById('busy')
     busy.classList.toggle('is-busy', isBusy)
     busy.textContent = isBusy ? 'Claude está trabajando' : 'En espera'
+    byId('typing').hidden = !isBusy
   }
 
   events.addEventListener('hello', event => {
@@ -454,6 +539,9 @@
     setBusy(hello.isBusy)
     draw()
     drawUsage(hello.usage)
+    messages = hello.messages ?? []
+    drawChat()
+    byId('messages').scrollTop = byId('messages').scrollHeight
   })
   events.addEventListener('snapshot', event => {
     items = JSON.parse(event.data).items
@@ -467,12 +555,14 @@
     draw()
   })
   events.addEventListener('status', event => setBusy(JSON.parse(event.data).isBusy))
+  events.addEventListener('chat', event => {
+    messages = JSON.parse(event.data).messages
+    drawChat()
+  })
   events.addEventListener('usage', event => drawUsage(JSON.parse(event.data).usage))
   events.addEventListener('notice', event => {
     const notice = JSON.parse(event.data)
     toast(notice.text, notice.isOk)
-    if (notice.isOk && isRequestPending) byId('request').value = ''
-    isRequestPending = false
   })
 </script>
 </body>

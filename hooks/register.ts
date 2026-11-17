@@ -16,6 +16,9 @@ const feed = atom({ plugin: 'ventana', key: 'feed' } as const, [], {
 
 const READY_TIMEOUT_MS = 6000
 const FEED_ROWS = 100
+const CHAT_ROWS = 80
+const CHAT_TEXT = 30000
+const CHAT_EVERY_MS = 5000
 const DETAIL_KEYS = [
   'file_path',
   'description',
@@ -31,12 +34,14 @@ const DETAIL_KEYS = [
 type ServerLine =
   | { type: 'ready'; port: number; token: string }
   | { type: 'bye' }
-  | { type: 'fill'; text: string }
+  | { type: 'send'; text: string }
 
 // The server of this module's life: started once, gone with a reload.
 let server: Promise<Link> | undefined
 // Where it listens while it runs; nothing is sent while it does not.
 let current: Link | undefined
+// When the Chat tab was last sent the conversation, to pace it in a turn.
+let chatAt = 0
 
 function post($: EngineInterface, path: string, body: object): void {
   if (current === undefined) return
@@ -81,7 +86,50 @@ async function report($: EngineInterface, turn?: object): Promise<void> {
   }
 }
 
-// Text the person sent from the window: into the prompt box, never submitted.
+// What the Chat tab shows of one transcript row: the words alone, or ''
+// for a row that is the engine's own (a reminder, a command's output).
+function words(role: string, text: string): string {
+  if (role !== 'user') return text.trim()
+  const bare = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim()
+  const command = /^<command-name>\s*(\/?[^<\s]+)\s*<\/command-name>/.exec(bare)
+  if (command !== null) {
+    const name = command[1] ?? ''
+
+    return name.startsWith('/') ? name : `/${name}`
+  }
+
+  return bare.startsWith('<') ? '' : bare
+}
+
+// The Chat tab's rows: the conversation as the session holds it.
+async function chat($: EngineInterface): Promise<void> {
+  if (current === undefined) return
+  try {
+    const rows = await $.session.messages()
+    const messages = rows
+      .map(row => ({ role: row.role, text: words(row.role, row.text) }))
+      .filter(row => row.text !== '')
+      .slice(-CHAT_ROWS)
+      .map(row => ({ role: row.role, text: row.text.slice(0, CHAT_TEXT) }))
+    post($, '/chat', { messages })
+  } catch {
+    // The tab keeps the rows it has.
+  }
+}
+
+// A message typed in the window: submitted as the person's own words. A
+// slash command is put in the prompt box instead, for their Enter.
+async function send($: EngineInterface, text: string): Promise<void> {
+  if (text.startsWith('/')) return fill($, text)
+  const sent = await $.prompt
+    .submit({ text, asUser: true })
+    .catch(() => undefined)
+  if (sent === undefined || sent.drop !== undefined) {
+    post($, '/notice', { isOk: false, text: 'No se pudo enviar el mensaje.' })
+  }
+}
+
+// A command from the window: into the prompt box, never submitted.
 async function fill($: EngineInterface, text: string): Promise<void> {
   const filled = await $.prompt
     .fill({ text, mode: 'append' })
@@ -90,7 +138,7 @@ async function fill($: EngineInterface, text: string): Promise<void> {
     $,
     '/notice',
     filled?.isFilled === true
-      ? { isOk: true, text: 'Listo: está en el prompt de la terminal, da Enter.' }
+      ? { isOk: true, text: 'Es un comando: quedó en el prompt de la terminal, da Enter.' }
       : { isOk: false, text: 'No pude escribir en el prompt (¿hay un diálogo abierto?).' },
   )
 }
@@ -132,11 +180,12 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
       current = found
       post($, '/snapshot', { items: await read($, feed) })
       void report($)
+      void chat($)
       settle(found)
     }
     if (message.type === 'bye') await update($, link, () => null)
-    if (message.type === 'fill' && typeof message.text === 'string') {
-      await fill($, message.text)
+    if (message.type === 'send' && typeof message.text === 'string') {
+      void send($, message.text.trim())
     }
   }
 
@@ -206,6 +255,12 @@ export const register: Register = on => {
         startedAt,
         endedAt: startedAt,
       })
+      const said = words('user', e.text)
+      if (said !== '') {
+        post($, '/chat-add', {
+          message: { role: 'user', text: said.slice(0, CHAT_TEXT) },
+        })
+      }
     }
 
     return next(e)
@@ -223,11 +278,17 @@ export const register: Register = on => {
     }
     await record($, item)
     const ran = await next(e)
+    const endedAt = await $.clock.now().catch(() => item.startedAt)
     await record($, {
       ...item,
-      endedAt: await $.clock.now().catch(() => item.startedAt),
+      endedAt,
       isError: ran.deny !== undefined || ran.isError === true,
     })
+    // What Claude wrote so far this turn, a few seconds apart at most.
+    if (!item.isAgent && endedAt - chatAt > CHAT_EVERY_MS) {
+      chatAt = endedAt
+      void chat($)
+    }
 
     return ran
   })
@@ -244,6 +305,7 @@ export const register: Register = on => {
     if (input.agentId === undefined) {
       post($, '/status', { isBusy: false })
       void report($, done.usage)
+      void chat($)
     }
 
     return done

@@ -13,6 +13,7 @@ const token =
   process.env.VENTANA_TOKEN || crypto.randomUUID().replaceAll('-', '')
 const wantedPort = Number(process.env.VENTANA_PORT || 0)
 const parent = process.ppid
+const bornAt = Date.now()
 
 const IDLE_EXIT_MS = 60_000
 const encoder = new TextEncoder()
@@ -24,6 +25,8 @@ type Item = { id: string }
 let items: Item[] = []
 let isBusy = false
 let usage: unknown = null
+type Message = { role: string; text: string }
+let messages: Message[] = []
 
 // The person's shortcuts, kept outside the mod's folder so an update of the
 // mod does not replace them.
@@ -161,7 +164,14 @@ const handle = async (request: Request, port: number): Promise<Response> => {
         // `build` changes when the page's file does: an open window reloads.
         const build = statSync(join(here, 'index.html')).mtimeMs
         controller.enqueue(
-          frame('hello', { cwd: process.cwd(), items, isBusy, usage, build }),
+          frame('hello', {
+            cwd: process.cwd(),
+            items,
+            isBusy,
+            usage,
+            build,
+            messages,
+          }),
         )
       },
       cancel() {
@@ -179,6 +189,12 @@ const handle = async (request: Request, port: number): Promise<Response> => {
   }
 
   if (request.method === 'POST' && url.pathname === '/open') {
+    // Restarted under an open window: give it a moment to come back
+    // before opening a second one.
+    const isRestart = wantedPort !== 0 && Date.now() - bornAt < 15_000
+    for (let wait = 0; isRestart && clients.size === 0 && wait < 25; wait += 1) {
+      await Bun.sleep(200)
+    }
     const launched = clients.size === 0
     if (launched) launchWindow(port)
 
@@ -225,12 +241,27 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     return json({})
   }
 
-  if (request.method === 'POST' && url.pathname === '/fill') {
+  if (request.method === 'POST' && url.pathname === '/chat') {
+    messages = ((await request.json()) as { messages: Message[] }).messages
+    broadcast('chat', { messages })
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/chat-add') {
+    const { message } = (await request.json()) as { message: Message }
+    messages = [...messages, message].slice(-80)
+    broadcast('chat', { messages })
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/send') {
     const { text } = (await request.json()) as { text: unknown }
     if (typeof text !== 'string' || text.trim() === '' || text.length > 20_000) {
       return json({ error: 'text' }, 400)
     }
-    say({ type: 'fill', text })
+    say({ type: 'send', text })
 
     return json({})
   }

@@ -1,15 +1,15 @@
 # ventana
 
-Un mod para Claude Code que abre una ventana gráfica al lado de la terminal. Sigues trabajando con Claude en la terminal como siempre; la ventana es un panel de control que muestra lo que pasa en la sesión y te deja mandarle texto al prompt.
+Un mod para Claude Code que abre una ventana gráfica al lado de la terminal. Sigues trabajando con Claude en la terminal como siempre; la ventana muestra el chat y lo que pasa en la sesión, y también te deja escribirle a Claude desde ahí.
 
 Escribe `/ventana` en una sesión para abrirla.
 
 ## Qué tiene
 
+- **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal; los comandos con `/` quedan en el prompt de la terminal para que des Enter. Incluye atajos editables. Los permisos y las preguntas con opciones se siguen contestando en la terminal.
 - **Actividad:** cada herramienta que usa Claude, en vivo, con cuánto tardó y si falló, y tus pedidos intercalados.
 - **Uso:** duración de la sesión, costo, modelo, llenado del contexto, límites de la cuenta y tokens del último turno.
 - **Mods:** tus plugins instalados con un interruptor para prenderlos y apagarlos. El cambio se aplica en la sesión con `/reload-plugins`.
-- **Pedidos:** una caja de texto y atajos editables. Lo que envías aparece en el prompt de la terminal y tú das Enter; nada se envía solo.
 
 ## Requisitos
 
