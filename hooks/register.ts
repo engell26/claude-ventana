@@ -15,6 +15,7 @@ const feed = atom({ plugin: 'ventana', key: 'feed' } as const, [], {
 })
 
 const READY_TIMEOUT_MS = 6000
+const SETTING_KEYS = ['permissionMode', 'model']
 const FEED_ROWS = 100
 const CHAT_ROWS = 80
 const CHAT_TEXT = 30000
@@ -42,6 +43,7 @@ type ServerLine =
   | { type: 'ready'; port: number; token: string }
   | { type: 'bye' }
   | { type: 'send'; text: string }
+  | { type: 'setting'; key: string; value: string }
 
 // The server of this module's life: started once, gone with a reload.
 let server: Promise<Link> | undefined
@@ -96,11 +98,21 @@ async function record($: EngineInterface, item: Item): Promise<void> {
 async function report($: EngineInterface, turn?: object): Promise<void> {
   if (current === undefined) return
   try {
-    const [usage, model] = await Promise.all([
+    const [usage, model, rows] = await Promise.all([
       $.session.usage(),
       $.session.model(),
+      $.config.list().catch(() => []),
     ])
-    post($, '/usage', { usage: { ...usage, model, turn } })
+    // The two rows the window's pickers change, as the /config menu has them.
+    const settings = rows
+      .filter(row => SETTING_KEYS.includes(row.key))
+      .map(row => ({
+        key: row.key,
+        value: String(row.value),
+        options: 'options' in row && Array.isArray(row.options) ? row.options.map(String) : [],
+        isLocked: row.isLocked,
+      }))
+    post($, '/usage', { usage: { ...usage, model, turn }, settings })
   } catch {
     // The tab keeps its last figures.
   }
@@ -206,6 +218,29 @@ async function fill($: EngineInterface, text: string): Promise<void> {
   )
 }
 
+// Starts the server if it is not running and asks it for the window.
+async function openWindow($: EngineInterface): Promise<boolean> {
+  const timeout = $.clock.sleep(READY_TIMEOUT_MS).then((): never => {
+    throw new Error('el servidor no respondio a tiempo')
+  })
+  const found = await Promise.race([start($, await read($, link)), timeout])
+  const opened = await $.http.fetch(`http://127.0.0.1:${found.port}/open`, {
+    method: 'POST',
+    headers: { 'x-ventana-token': found.token },
+  })
+  if (!opened.ok) throw new Error(`error ${opened.status}`)
+
+  return (JSON.parse(opened.text) as { launched: boolean }).launched
+}
+
+// The session's permission mode, as the classic hooks' input carries it.
+let mode = ''
+function noteMode($: EngineInterface, now: string | undefined): void {
+  if (now === undefined || now === mode) return
+  mode = now
+  post($, '/mode', { mode })
+}
+
 function describe(input: Record<string, unknown>): string {
   for (const key of DETAIL_KEYS) {
     const value = input[key]
@@ -248,6 +283,15 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
       settle(found)
     }
     if (message.type === 'bye') await update($, link, () => null)
+    if (message.type === 'setting' && SETTING_KEYS.includes(message.key)) {
+      const set = await $.config
+        .set({ key: message.key, value: message.value })
+        .catch((error: unknown) => ({ deny: String(error) }))
+      post($, '/notice', 'deny' in set && set.deny !== undefined
+        ? { isOk: false, text: `No se pudo cambiar: ${set.deny}` }
+        : { isOk: true, text: 'Cambiado.' })
+      void report($)
+    }
     if (message.type === 'send' && typeof message.text === 'string') {
       void send($, message.text.trim())
     }
@@ -304,6 +348,13 @@ export const register: Register = on => {
     // was. The server leaves by itself if no window comes back to it.
     const prior = await read($, link)
     if (prior !== null) void start($, prior)
+
+    // Started by the `claude-ventana` launcher: the window opens by itself.
+    // The variable is cleared so nothing this session starts inherits it.
+    if ((await $.env.get('VENTANA_AUTO')) === '1') {
+      await $.env.set('VENTANA_AUTO', undefined)
+      $.clock.after(800, () => void openWindow($).catch(() => {}))
+    }
 
     return started
   })
@@ -462,20 +513,21 @@ export const register: Register = on => {
     return done
   })
 
+  on('classic.UserPromptSubmit', ($, e, next) => {
+    noteMode($, e.permission_mode)
+
+    return next(e)
+  })
+
+  on('classic.Stop', ($, e, next) => {
+    noteMode($, e.permission_mode)
+
+    return next(e)
+  })
+
   on('command.run', { command: 'ventana' }, async $ => {
     try {
-      const timeout = $.clock
-        .sleep(READY_TIMEOUT_MS)
-        .then((): never => {
-          throw new Error('el servidor no respondio a tiempo')
-        })
-      const found = await Promise.race([start($, await read($, link)), timeout])
-      const opened = await $.http.fetch(
-        `http://127.0.0.1:${found.port}/open`,
-        { method: 'POST', headers: { 'x-ventana-token': found.token } },
-      )
-      if (!opened.ok) return { text: `Ventana: error ${opened.status}.` }
-      const { launched } = JSON.parse(opened.text) as { launched: boolean }
+      const launched = await openWindow($)
 
       return { text: launched ? 'Ventana abierta.' : 'La ventana ya esta abierta.' }
     } catch (error) {

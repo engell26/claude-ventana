@@ -2,7 +2,7 @@
 
 Un mod para Claude Code que abre una ventana gráfica al lado de la terminal. Sigues trabajando con Claude en la terminal como siempre; la ventana muestra el chat y lo que pasa en la sesión, y también te deja escribirle a Claude desde ahí.
 
-Escribe `/ventana` en una sesión para abrirla.
+Escribe `/ventana` en una sesión para abrirla, o abre todo directo con el comando `claude-ventana` (ver Lanzador).
 
 ## Qué tiene
 
@@ -13,6 +13,8 @@ Escribe `/ventana` en una sesión para abrirla.
 - **Sugerencias de comandos:** al escribir `/` en el chat sale la lista de comandos disponibles, como en la terminal. Los comandos se ejecutan desde la ventana.
 - **Ocultar la terminal:** un botón esconde y muestra la terminal donde corre Claude (solo en Hyprland con kitty). La terminal vuelve sola cuando una pregunta pasa a la terminal y al cerrar la ventana.
 - **Sesiones:** las sesiones de Claude abiertas ahora y tus proyectos con sus conversaciones recientes. Desde ahí llevas al frente la terminal de una sesión abierta, retomas una conversación pasada o empiezas una nueva en cualquier proyecto; cada una se abre en su propia terminal de kitty.
+- **Modo y modelo:** encima de la caja de mensaje eliges el modo de permisos (Normal, Aceptar ediciones, Planear, Automático, No preguntar) y el modelo, igual que en `/config`.
+- **Lo que te queda:** arriba se ve cuánto te queda de tu plan en la ventana de uso más apretada.
 - **Uso:** duración de la sesión, costo, modelo, llenado del contexto, límites de la cuenta y tokens del último turno.
 - **Mods:** tus plugins instalados con un interruptor para prenderlos y apagarlos. El cambio se aplica en la sesión con `/reload-plugins`.
 
@@ -39,6 +41,17 @@ claude plugin install ventana --marketplace engell26/claude-ventana
 ```
 
 En la app de escritorio, donde `/plugin` no corre: pulsa + junto a la caja de prompt, luego Plugins, Add marketplace con `engell26/claude-ventana`, y Add plugin.
+
+## Lanzador
+
+`lanzador/claude-ventana` abre Claude con la ventana ya abierta. Para tenerlo como comando y en el menú de aplicaciones:
+
+```
+ln -s ~/claude-ventana/lanzador/claude-ventana ~/.local/bin/claude-ventana
+cp ~/claude-ventana/lanzador/claude-ventana.desktop ~/.local/share/applications/
+```
+
+En una terminal, `claude-ventana` corre Claude ahí mismo; desde el menú abre kitty con Claude adentro. Por defecto la terminal se oculta al abrir la ventana; se cambia en la pestaña Mods.
 
 ## Cómo funciona
 

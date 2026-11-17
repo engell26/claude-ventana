@@ -1,0 +1,10 @@
+#!/bin/sh
+# Abre Claude Code con su ventana gráfica.
+# En una terminal: corre Claude ahí mismo. Desde el menú de aplicaciones
+# (sin terminal): abre kitty con Claude adentro.
+export VENTANA_AUTO=1
+if [ -t 0 ] && [ -t 1 ]; then
+  exec claude "$@"
+fi
+cd "${HOME}" || exit 1
+exec kitty --class claude-terminal -e claude "$@"

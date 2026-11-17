@@ -192,6 +192,27 @@
   }
   .send-button:disabled { opacity: 0.4; cursor: default; }
 
+  /* what is left of the plan, and the pickers */
+  .left { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--dim); font-size: 12.5px; white-space: nowrap; }
+  .left[hidden] { display: none; }
+  .left + .chip { margin-left: 0; }
+  .left .ring { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--line); display: inline-block; }
+  .left .ring b { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--ok) calc(var(--left, 0) * 1%), transparent 0); transition: --left 0.6s; }
+  .left .ring::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg); }
+  .left.is-low .ring b { background: conic-gradient(var(--off) calc(var(--left, 0) * 1%), transparent 0); }
+  .left.is-low { color: var(--off); }
+  .pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; font-size: 12.5px; color: var(--dim); }
+  .pickers[hidden] { display: none; }
+  .picker { display: inline-flex; align-items: center; gap: 6px; }
+  .picker select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 10px; font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .picker select:hover { border-color: var(--dim); }
+  .pickers .now { margin-left: auto; }
+  .check { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; }
+  .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+
   /* sessions */
   .bar.spaced { margin-top: 22px; }
   .inline { display: flex; gap: 8px; }
@@ -392,6 +413,7 @@
     <span class="spark">✳</span>Claude
     <div class="status" id="statusBox"><i class="dot"></i><span id="status">Conectando</span></div>
   </div>
+  <span class="left" id="leftPill" hidden title="Uso que te queda de tu plan"><i class="ring"><b id="leftRing"></b></i><span id="leftText"></span></span>
   <button class="chip" id="terminalButton" hidden>Ocultar terminal</button>
   <nav role="tablist">
     <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
@@ -426,6 +448,17 @@
             <div class="end"><button class="button" id="addShortcut">Añadir atajo</button></div>
           </div>
           <ul class="suggest" id="suggest" role="listbox" aria-label="Comandos" hidden></ul>
+          <div class="pickers" id="pickers" hidden>
+            <label class="picker" title="Normal: te pregunta antes de cada acción.&#10;Aceptar ediciones: edita archivos sin preguntar.&#10;Planear: solo investiga y te propone un plan.&#10;Automático: un clasificador decide y casi no pregunta.&#10;No preguntar: rechaza lo que no esté permitido.">
+              <span>Modo</span>
+              <select id="modePicker" aria-label="Modo de permisos"></select>
+            </label>
+            <label class="picker" title="El modelo que responde">
+              <span>Modelo</span>
+              <select id="modelPicker" aria-label="Modelo"></select>
+            </label>
+            <span class="now" id="modeNow"></span>
+          </div>
           <div class="composer" id="composer">
             <div class="tray" id="tray" hidden></div>
             <div class="row">
@@ -479,7 +512,12 @@
   </section>
   <section id="mods" class="page" hidden>
     <div class="inner">
-      <div class="bar"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
+      <div class="card">
+        <h2>Ventana</h2>
+        <label class="check"><input type="checkbox" id="prefHide"> Ocultar la terminal al abrir la ventana</label>
+        <p class="note">La terminal vuelve sola cuando cierras la ventana o cuando algo solo se puede responder allá.</p>
+      </div>
+      <div class="bar spaced"><h2>Plugins instalados</h2><button class="button" id="reloadPlugins">Actualizar</button></div>
       <div class="card" id="applyCard" hidden>
         <p class="note">El cambio quedó guardado. Para aplicarlo en esta sesión hace falta <code>/reload-plugins</code>.</p>
         <div class="end"><button class="button is-main" id="applyButton">Ponerlo en el prompt</button></div>
@@ -701,6 +739,68 @@
     if (lines.length === 0 || !lines.every(line => line.startsWith('file://'))) return []
     return lines.map(line => decodeURIComponent(new URL(line).pathname))
   }
+
+  // ---- What is left of the plan: the tightest window, in the header
+  const drawLeft = limits => {
+    const pill = byId('leftPill')
+    if (limits.length === 0) { pill.hidden = true; return }
+    const tightest = [...limits].sort((a, b) => b.percentUsed - a.percentUsed)[0]
+    const left = Math.max(0, 100 - Math.round(tightest.percentUsed))
+    pill.hidden = false
+    pill.classList.toggle('is-low', left <= 15)
+    byId('leftRing').style.setProperty('--left', String(left))
+    const span = { five_hour: '5 h', seven_day: '7 días', spend_limit: 'gasto' }[tightest.kind] ?? tightest.kind
+    byId('leftText').textContent = `Te queda ${left} % (${span})`
+    pill.title = limits.map(limit => `${LIMIT_NAMES[limit.kind] ?? limit.kind}: te queda ${Math.max(0, 100 - Math.round(limit.percentUsed))} %${limit.resetsAt ? `, se reinicia ${new Date(limit.resetsAt).toLocaleString('es')}` : ''}`).join('\n')
+  }
+
+  // ---- Mode and model pickers
+  const MODE_NAMES = {
+    default: 'Normal',
+    acceptEdits: 'Aceptar ediciones',
+    plan: 'Planear',
+    auto: 'Automático',
+    dontAsk: 'No preguntar',
+    bypassPermissions: 'Sin permisos',
+  }
+  let sessionMode = ''
+  const drawSettings = list => {
+    const pickers = byId('pickers')
+    pickers.hidden = list.length === 0
+    for (const setting of list) {
+      const picker = byId(setting.key === 'permissionMode' ? 'modePicker' : 'modelPicker')
+      if (!picker || picker === document.activeElement) continue
+      const options = setting.options.includes(setting.value) ? setting.options : [setting.value, ...setting.options]
+      picker.replaceChildren(...options.map(value => {
+        const option = element('option', '', setting.key === 'permissionMode' ? (MODE_NAMES[value] ?? value) : value)
+        option.value = value
+        return option
+      }))
+      picker.value = setting.value
+      picker.disabled = setting.isLocked
+      picker.dataset.key = setting.key
+    }
+    drawMode()
+  }
+  const drawMode = () => {
+    const picked = byId('modePicker').value
+    byId('modeNow').textContent = sessionMode && sessionMode !== picked
+      ? `Esta sesión va en: ${MODE_NAMES[sessionMode] ?? sessionMode}` : ''
+  }
+  for (const id of ['modePicker', 'modelPicker']) {
+    byId(id).addEventListener('change', async event => {
+      const picker = event.target
+      const answer = await api('/setting', { key: picker.dataset.key, value: picker.value }).catch(() => ({ error: 'red' }))
+      if (answer.error) toast('No se pudo cambiar.', false)
+      picker.blur()
+    })
+  }
+
+  // ---- Ajustes de la ventana
+  byId('prefHide').addEventListener('change', async event => {
+    const answer = await api('/prefs', { prefs: { hideTerminalOnOpen: event.target.checked } }).catch(() => ({ error: 'red' }))
+    if (answer.error) toast('No se pudo guardar el ajuste.', false)
+  })
 
   // ---- Sesiones
   const ago = ms => {
@@ -1218,11 +1318,12 @@
     byId('contextNote').textContent = context.tokens === undefined
       ? `Ventana de ${count(context.window ?? 0)} tokens.`
       : `${count(context.tokens)} de ${count(context.window)} tokens.`
+    drawLeft(usage.rateLimits ?? [])
     if ((usage.rateLimits ?? []).length > 0) {
       byId('limits').replaceChildren(...usage.rateLimits.map(limit => {
         const box = element('div', 'limit')
         const head = element('div', 'head')
-        head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `${Math.round(limit.percentUsed)} %`))
+        head.append(element('span', '', LIMIT_NAMES[limit.kind] ?? limit.kind), element('span', '', `te queda ${Math.max(0, 100 - Math.round(limit.percentUsed))} %`))
         const meter = element('div', 'meter')
         const fill = element('i')
         fill.style.width = `${Math.min(100, limit.percentUsed)}%`
@@ -1303,6 +1404,9 @@
     drawChat(true)
     commands = hello.commands ?? []
     asks = hello.asks ?? []
+    sessionMode = hello.mode ?? ''
+    drawSettings(hello.settings ?? [])
+    byId('prefHide').checked = hello.prefs?.hideTerminalOnOpen !== false
     drawAsks()
     drawTerminal(hello.terminal)
   })
@@ -1332,6 +1436,8 @@
     asks = asks.filter(one => one.id !== id)
     drawAsks()
   })
+  events.addEventListener('settings', event => drawSettings(JSON.parse(event.data).settings))
+  events.addEventListener('mode', event => { sessionMode = JSON.parse(event.data).mode; drawMode() })
   events.addEventListener('commands', event => { commands = JSON.parse(event.data).commands })
   events.addEventListener('terminal', event => drawTerminal(JSON.parse(event.data)))
   events.addEventListener('usage', event => drawUsage(JSON.parse(event.data).usage))

@@ -25,6 +25,24 @@ type Item = { id: string }
 let items: Item[] = []
 let isBusy = false
 let usage: unknown = null
+let settings: unknown[] = []
+let mode = ''
+
+// The window's own preferences, kept beside the shortcuts.
+type Prefs = { hideTerminalOnOpen: boolean }
+const DEFAULT_PREFS: Prefs = { hideTerminalOnOpen: true }
+const prefsPath = () => join(configDir, 'ajustes.json')
+const readPrefs = (): Prefs => {
+  try {
+    const kept = JSON.parse(readFileSync(prefsPath(), 'utf8'))
+
+    return { hideTerminalOnOpen: kept.hideTerminalOnOpen !== false }
+  } catch {
+    return DEFAULT_PREFS
+  }
+}
+// The window the next /open launches hides the terminal once it connects.
+let isHidingOnConnect = false
 type Message = { role: string; text: string }
 let messages: Message[] = []
 type Command = { name: string; description: string }
@@ -516,6 +534,10 @@ const handle = async (request: Request, port: number): Promise<Response> => {
         mine = controller
         clients.add(controller)
         lastClientAt = Date.now()
+        if (isHidingOnConnect) {
+          isHidingOnConnect = false
+          setTimeout(() => setTerminal(true), 700)
+        }
         // `build` changes when the page's file does: an open window reloads.
         const build = statSync(join(here, 'index.html')).mtimeMs
         controller.enqueue(
@@ -529,6 +551,9 @@ const handle = async (request: Request, port: number): Promise<Response> => {
             commands,
             terminal: readTerminal(),
             asks: [...asks.values()].map(held => held.ask),
+            settings,
+            mode,
+            prefs: readPrefs(),
           }),
         )
       },
@@ -554,7 +579,10 @@ const handle = async (request: Request, port: number): Promise<Response> => {
       await Bun.sleep(200)
     }
     const launched = clients.size === 0
-    if (launched) launchWindow(port)
+    if (launched) {
+      isHidingOnConnect = readPrefs().hideTerminalOnOpen
+      launchWindow(port)
+    }
 
     return json({ launched })
   }
@@ -587,8 +615,11 @@ const handle = async (request: Request, port: number): Promise<Response> => {
   }
 
   if (request.method === 'POST' && url.pathname === '/usage') {
-    usage = ((await request.json()) as { usage: unknown }).usage
+    const body = (await request.json()) as { usage: unknown; settings?: unknown[] }
+    usage = body.usage
+    if (Array.isArray(body.settings)) settings = body.settings
     broadcast('usage', { usage })
+    broadcast('settings', { settings })
 
     return json({})
   }
@@ -612,6 +643,37 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     broadcast('chat', { messages })
 
     return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/mode') {
+    mode = String(((await request.json()) as { mode: unknown }).mode ?? '')
+    broadcast('mode', { mode })
+
+    return json({})
+  }
+
+  // Only the two rows the pickers show; the mod changes them as /config does.
+  if (request.method === 'POST' && url.pathname === '/setting') {
+    const body = (await request.json()) as { key: unknown; value: unknown }
+    if ((body.key !== 'permissionMode' && body.key !== 'model') || typeof body.value !== 'string') {
+      return json({ error: 'setting' }, 400)
+    }
+    say({ type: 'setting', key: body.key, value: body.value })
+
+    return json({})
+  }
+
+  if (request.method === 'GET' && url.pathname === '/prefs') {
+    return json({ prefs: readPrefs() })
+  }
+
+  if (request.method === 'POST' && url.pathname === '/prefs') {
+    const body = (await request.json()) as { prefs: Partial<Prefs> }
+    const prefs = { ...readPrefs(), hideTerminalOnOpen: body.prefs?.hideTerminalOnOpen !== false }
+    mkdirSync(configDir, { recursive: true })
+    writeFileSync(prefsPath(), `${JSON.stringify(prefs, null, 2)}\n`)
+
+    return json({ prefs })
   }
 
   if (request.method === 'POST' && url.pathname === '/commands') {

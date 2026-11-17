@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Claude
+Comment=Claude Code con su ventana gráfica
+Exec=claude-ventana
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;
