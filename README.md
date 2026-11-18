@@ -18,6 +18,7 @@ Type `/ventana` in a session to open it, or start everything at once with the `c
 - **Permissions and questions:** when Claude asks for permission, asks a multiple-choice question or finishes a plan, a card shows up in the window so you can answer there, with a preview of the command or the edit. If the window is closed, you do not answer within 5 minutes, or you pick "Responder en la terminal", the question goes to the terminal as usual.
 - **Activity:** every tool Claude uses, live. In a wide window it is a side panel; in a narrow window it shows inside the chat, like in the terminal.
 - **Attachments:** paste images or files with Ctrl+V, drag them in, or use the + button. They are saved to `~/.cache/claude-ventana/adjuntos` (deleted after 7 days) and the message gives Claude their path.
+- **Images from Claude:** when Claude names an image file in a reply (a screenshot it took, a chart it made), the window shows it under the text. Click any image to see it full size. The server only serves image files whose path Claude wrote in a reply.
 - **Command suggestions:** type `/` in the chat to see the available commands, like in the terminal.
 - **Hide the terminal:** a button hides and shows the terminal Claude runs in. It comes back by itself when a question moves to the terminal and when you close the window.
 - **Sessions:** the Claude sessions open right now and your projects with their recent conversations. Bring an open session's terminal to the front, resume a past conversation, or start a new one in any project.

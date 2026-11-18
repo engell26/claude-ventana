@@ -847,6 +847,27 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     }
   }
 
+  // An image Claude names in a reply, shown under it: only a path one of
+  // Claude's messages spells out, and only a file that is an image once its
+  // links are followed. The page reads nothing else of the disk through it.
+  if (request.method === 'GET' && url.pathname === '/image') {
+    const given = url.searchParams.get('path') ?? ''
+    const isNamed = given !== '' && messages.some(one => one.role === 'assistant' && one.text.includes(given))
+    if (!isNamed) return json({ error: 'image' }, 403)
+    try {
+      const real = realpathSync(given.startsWith('~/') ? join(homedir(), given.slice(2)) : given)
+      if (!IMAGE_TYPES.includes(extname(real).toLowerCase()) || !statSync(real).isFile()) {
+        return json({ error: 'image' }, 403)
+      }
+
+      return new Response(Bun.file(real), {
+        headers: { 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' },
+      })
+    } catch {
+      return json({ error: 'image' }, 404)
+    }
+  }
+
   if (request.method === 'POST' && url.pathname === '/send') {
     const { text } = (await request.json()) as { text: unknown }
     if (typeof text !== 'string' || text.trim() === '' || text.length > 20_000) {

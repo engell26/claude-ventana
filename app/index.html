@@ -221,7 +221,16 @@
   .file.is-loading { opacity: 0.6; }
   .message .files { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; white-space: normal; }
   .message .text + .files { margin-top: 8px; }
-  .message .files img { max-width: 220px; max-height: 180px; border-radius: 10px; display: block; }
+  .message .files img { max-width: 220px; max-height: 180px; border-radius: 10px; display: block; cursor: zoom-in; }
+  .message.is-assistant .files { justify-content: flex-start; margin-top: 10px; }
+  .message.is-assistant .files img { max-width: min(100%, 420px); max-height: 320px; border: 1px solid var(--line); }
+  /* an image seen whole: a click or Esc closes it */
+  .viewer {
+    position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.82); cursor: zoom-out; padding: 24px;
+  }
+  .viewer[hidden] { display: none; }
+  .viewer img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
   .message .files .file { background: var(--surface); }
   .composer:focus-within { border-color: var(--dim); }
   .composer textarea {
@@ -617,6 +626,7 @@
   </section>
 </main>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="viewer" id="viewer" role="dialog" aria-label="Imagen" hidden><img id="viewerImage" alt=""></div>
 <footer id="cwd">&nbsp;</footer>
 </div>
 <script>
@@ -800,6 +810,52 @@
   const sizeOf = bytes => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
   const kindOf = name => (name.split('.').pop() ?? '').slice(0, 4).toUpperCase() || 'DOC'
 
+  // An image seen whole, over the window.
+  const openImage = (src, alt) => {
+    byId('viewerImage').src = src
+    byId('viewerImage').alt = alt
+    byId('viewer').hidden = false
+  }
+  const closeImage = () => { byId('viewer').hidden = true; byId('viewerImage').removeAttribute('src') }
+  byId('viewer').addEventListener('click', closeImage)
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || byId('viewer').hidden) return
+    event.preventDefault()
+    event.stopPropagation()
+    closeImage()
+  }, true)
+
+  // Images Claude names in a reply: a Markdown image, or a bare absolute
+  // (or ~/) path to one. Shown under the words; one that fails to load goes.
+  const MARKDOWN_IMAGE = /!\[([^\]]*)\]\(((?:~\/|\/)[^)\s]+)\)/g
+  const BARE_IMAGE = /(?<![\w:/.~-])((?:~\/|\/)[^\s`'"()<>]+\.(?:png|jpe?g|gif|webp|bmp|svg))/gi
+  const imagesIn = text => {
+    const found = []
+    for (const match of text.matchAll(MARKDOWN_IMAGE)) found.push(match[2])
+    for (const match of text.matchAll(BARE_IMAGE)) found.push(match[1])
+    return [...new Set(found)].filter(isImagePath).slice(0, 8)
+  }
+  const hashOf = text => [...text].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) | 0, 7).toString(36)
+  const fillAssistant = (node, text) => {
+    node.innerHTML = markdown(text.replace(MARKDOWN_IMAGE, (_, alt) => alt))
+    const paths = imagesIn(text)
+    if (paths.length === 0) return
+    // The message's own mark in the address: the same file named again in a
+    // later message (a new screenshot over the old one) is fetched afresh.
+    const version = hashOf(node.dataset.key ?? text)
+    const files = element('div', 'files')
+    for (const path of paths) {
+      const image = element('img')
+      image.src = `/image?t=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}&v=${version}`
+      image.alt = path.split('/').pop()
+      image.title = path
+      image.addEventListener('error', () => image.remove())
+      image.addEventListener('click', () => openImage(image.src, image.alt))
+      files.append(image)
+    }
+    node.append(files)
+  }
+
   // A user message: its words, and the files it names shown as files.
   const fillUser = (node, text) => {
     const at = text.lastIndexOf(FILES_MARK)
@@ -813,6 +869,7 @@
         const image = element('img')
         image.src = fileUrl(path)
         image.alt = path.split('/').pop()
+        image.addEventListener('click', () => openImage(image.src, image.alt))
         files.append(image)
       } else {
         const chip = element('div', 'file')
@@ -1242,7 +1299,7 @@
         const node = element('div', `message is-${message.role === 'user' ? 'user' : 'assistant'}`)
         node.dataset.key = `${message.role}:${message.text.slice(0, 80)}:${messages.slice(0, at).filter(one => one.text === message.text).length}`
         if (message.role === 'user') fillUser(node, message.text)
-        else node.innerHTML = markdown(message.text)
+        else fillAssistant(node, message.text)
         nodes.push(node)
       }
       run.push(...(message.tools ?? []))
