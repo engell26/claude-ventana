@@ -2,9 +2,7 @@
 
 *[Leer en español](README.es.md)*
 
-<!-- Demo: record it and save it as docs/demo.gif, then remove these comment marks.
 ![ventana next to a Claude Code terminal session](docs/demo.gif)
--->
 
 A Claude Code mod for Linux that opens a native window next to your terminal. You keep working with Claude in the terminal as usual. The window shows the chat and what is happening in the session, and you can also type to Claude from it.
 
