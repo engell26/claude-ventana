@@ -74,3 +74,7 @@ Los atajos se guardan en `~/.config/claude-ventana/atajos.json`.
 ## Aviso
 
 La API de mods de Claude Code es de acceso anticipado y puede cambiar entre versiones. Este mod se escribió contra Claude Code 2.1.322.
+
+## Licencia
+
+MIT. Mira el archivo [LICENSE](LICENSE).
