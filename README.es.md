@@ -12,7 +12,7 @@ Escribe `/ventana` en una sesión para abrirla, o abre todo directo con el coman
 
 ## Qué tiene
 
-- **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal. Incluye atajos editables.
+- **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal. Mientras Claude trabaja, el botón ■ lo detiene, como Esc en la terminal. Incluye atajos editables.
 - **Permisos y preguntas:** cuando Claude pide permiso para algo, te hace preguntas con opciones o termina un plan, sale una tarjeta en la ventana para responder ahí, con la vista previa del comando o del cambio. Si la ventana está cerrada, no respondes en 5 minutos o eliges "Responder en la terminal", la pregunta sale en la terminal como siempre.
 - **Actividad:** cada herramienta que usa Claude, en vivo. Con la ventana ancha sale como panel al lado del chat; con la ventana angosta sale dentro del chat, como en la terminal.
 - **Adjuntos:** pega imágenes o archivos con Ctrl+V, arrástralos a la ventana o usa el botón +. Se guardan en `~/.cache/claude-ventana/adjuntos` (se borran solos a los 7 días) y el mensaje le pasa a Claude su ruta para que los lea.

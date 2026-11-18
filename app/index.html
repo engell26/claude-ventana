@@ -234,6 +234,13 @@
     background: var(--accent); color: var(--on-accent); font-size: 18px; line-height: 1;
   }
   .send-button:disabled { opacity: 0.4; cursor: default; }
+  /* shown while Claude works, beside send: a message can still be sent */
+  .stop-button {
+    flex: none; width: 34px; height: 34px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--accent); background: none; color: var(--accent); font-size: 13px; line-height: 1;
+  }
+  .stop-button[hidden] { display: none; }
+  .stop-button:hover { background: var(--accent); color: var(--on-accent); }
 
   /* what is left of the plan, and the pickers, inside the side panel */
   .left[hidden] { display: none; }
@@ -382,7 +389,7 @@
     width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 8px 12px; font: inherit; resize: vertical;
   }
-  .field:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible, .chip:focus-visible, .send-button:focus-visible, .icon-button:focus-visible, .summary:focus-visible {
+  .field:focus, .button:focus-visible, .switch:focus-visible, nav button:focus-visible, .chip:focus-visible, .send-button:focus-visible, .stop-button:focus-visible, .icon-button:focus-visible, .summary:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 1px;
   }
 
@@ -447,7 +454,7 @@
   .composer { transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s var(--ease); }
   .composer:focus-within { box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.12), 0 12px 32px rgba(0, 0, 0, 0.3); transform: translateY(-2px); }
   .composer textarea { transition: height 0.15s ease; }
-  .send-button, .attach-button { transition: transform 0.15s var(--ease), opacity 0.2s, background 0.2s; }
+  .send-button, .attach-button, .stop-button { transition: transform 0.15s var(--ease), opacity 0.2s, background 0.2s, color 0.2s; }
   .send-button:not(:disabled):hover { transform: scale(1.08); }
   .send-button:not(:disabled):active, .button:active, .chip:active, .option:active { transform: scale(0.96); }
   .button, .chip, .option, nav button, .switch { transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.12s; }
@@ -551,6 +558,7 @@
             <div class="row">
               <button class="attach-button" id="attachButton" aria-label="Adjuntar archivos" title="Adjuntar archivos">+</button>
               <textarea id="request" rows="1" placeholder="Escríbele a Claude" aria-label="Mensaje para Claude"></textarea>
+              <button class="stop-button" id="stopTurn" aria-label="Detener a Claude" title="Detener a Claude" hidden>■</button>
               <button class="send-button" id="sendRequest" aria-label="Enviar" disabled>↑</button>
             </div>
             <input type="file" id="filePicker" multiple hidden>
@@ -1366,6 +1374,10 @@
     else drawTerminal(answer)
   })
   byId('sendRequest').addEventListener('click', sendMessage)
+  byId('stopTurn').addEventListener('click', async () => {
+    const answer = await api('/stop', {}).catch(() => undefined)
+    if (answer === undefined || answer.error) toast('La ventana no responde.', false)
+  })
 
   // ---- Atajos
   let shortcuts = []
@@ -1446,6 +1458,7 @@
     byId('busy').classList.toggle('is-busy', isBusy)
     byId('busy').textContent = isBusy ? 'Claude está trabajando' : 'En espera'
     byId('typing').hidden = !isBusy
+    byId('stopTurn').hidden = !isBusy
   }
 
   // ---- Uso

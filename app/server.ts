@@ -857,6 +857,13 @@ const handle = async (request: Request, port: number): Promise<Response> => {
     return json({})
   }
 
+  // The stop button: the mod ends the running turn.
+  if (request.method === 'POST' && url.pathname === '/stop') {
+    say({ type: 'stop' })
+
+    return json({})
+  }
+
   if (request.method === 'GET' && url.pathname === '/shortcuts') {
     return json({ shortcuts: readShortcuts() })
   }

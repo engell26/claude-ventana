@@ -49,6 +49,7 @@ type ServerLine =
   | { type: 'ready'; port: number; token: string }
   | { type: 'bye' }
   | { type: 'send'; text: string }
+  | { type: 'stop' }
   | { type: 'setting'; key: string; value: string }
 
 // The server of this module's life: started once, gone with a reload.
@@ -239,6 +240,25 @@ async function openWindow($: EngineInterface): Promise<boolean> {
   return (JSON.parse(opened.text) as { launched: boolean }).launched
 }
 
+// The main loop's running turn, which the window's stop button ends.
+let runningTurn: string | undefined
+
+// The person pressed stop in the window: the running turn ends, its tools
+// stopped, as Esc does in the terminal.
+async function stop($: EngineInterface): Promise<void> {
+  const turnId = runningTurn
+  if (turnId === undefined) {
+    post($, '/notice', { isOk: false, text: 'Claude no está trabajando ahora.' })
+    return
+  }
+  try {
+    await $.turn.abort({ turnId })
+    post($, '/notice', { isOk: true, text: 'Detenido.' })
+  } catch {
+    post($, '/notice', { isOk: false, text: 'No se pudo detener: usa Esc en la terminal.' })
+  }
+}
+
 // The session's permission mode, as the classic hooks' input carries it.
 // Kept even while no server runs, so a window opened later starts right.
 // No hook carries it before the first prompt (SessionStart's input has none):
@@ -306,6 +326,7 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
     if (message.type === 'send' && typeof message.text === 'string') {
       void send($, message.text.trim())
     }
+    if (message.type === 'stop') void stop($)
   }
 
   const run = async () => {
@@ -508,7 +529,10 @@ export const register: Register = on => {
   })
 
   on('turn.start', ($, e, next) => {
-    if (e.agentId === undefined) post($, '/status', { isBusy: true })
+    if (e.agentId === undefined) {
+      runningTurn = e.turnId
+      post($, '/status', { isBusy: true })
+    }
 
     return next(e)
   })
@@ -517,6 +541,7 @@ export const register: Register = on => {
     const done = await next(e)
     const input = e as unknown as Record<string, unknown>
     if (input.agentId === undefined) {
+      runningTurn = undefined
       post($, '/status', { isBusy: false })
       void report($, done.usage)
       void chat($)

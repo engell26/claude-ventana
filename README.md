@@ -14,7 +14,7 @@ Type `/ventana` in a session to open it, or start everything at once with the `c
 
 ## Features
 
-- **Chat:** your messages and Claude's replies. What you type there is sent as if you typed it in the terminal. Includes editable shortcuts.
+- **Chat:** your messages and Claude's replies. What you type there is sent as if you typed it in the terminal. While Claude works, the ■ button stops it, like Esc in the terminal. Includes editable shortcuts.
 - **Permissions and questions:** when Claude asks for permission, asks a multiple-choice question or finishes a plan, a card shows up in the window so you can answer there, with a preview of the command or the edit. If the window is closed, you do not answer within 5 minutes, or you pick "Responder en la terminal", the question goes to the terminal as usual.
 - **Activity:** every tool Claude uses, live. In a wide window it is a side panel; in a narrow window it shows inside the chat, like in the terminal.
 - **Attachments:** paste images or files with Ctrl+V, drag them in, or use the + button. They are saved to `~/.cache/claude-ventana/adjuntos` (deleted after 7 days) and the message gives Claude their path.
