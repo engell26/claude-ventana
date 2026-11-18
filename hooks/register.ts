@@ -14,6 +14,12 @@ const feed = atom({ plugin: 'ventana', key: 'feed' } as const, [], {
   shape: 'feed-1',
 })
 
+// The session's permission mode as its hooks last reported it, kept through
+// a reload: the window shows it instead of the /config default.
+const sessionMode = atom({ plugin: 'ventana', key: 'mode' } as const, '', {
+  shape: 'mode-1',
+})
+
 const READY_TIMEOUT_MS = 6000
 const SETTING_KEYS = ['permissionMode', 'model']
 const FEED_ROWS = 100
@@ -234,11 +240,14 @@ async function openWindow($: EngineInterface): Promise<boolean> {
 }
 
 // The session's permission mode, as the classic hooks' input carries it.
-let mode = ''
-function noteMode($: EngineInterface, now: string | undefined): void {
-  if (now === undefined || now === mode) return
-  mode = now
-  post($, '/mode', { mode })
+// Kept even while no server runs, so a window opened later starts right.
+// No hook carries it before the first prompt (SessionStart's input has none):
+// until then the window says it shows the /config default.
+async function noteMode($: EngineInterface, now: string | undefined): Promise<void> {
+  if (now === undefined || now === '') return
+  if ((await read($, sessionMode)) === now) return
+  await update($, sessionMode, () => now)
+  post($, '/mode', { mode: now })
 }
 
 function describe(input: Record<string, unknown>): string {
@@ -277,6 +286,8 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
       await update($, link, () => found)
       current = found
       post($, '/snapshot', { items: await read($, feed) })
+      const mode = await read($, sessionMode)
+      if (mode !== '') post($, '/mode', { mode })
       void report($)
       void chat($)
       void commands($)
@@ -416,6 +427,7 @@ export const register: Register = on => {
   // A permission or a question Claude puts to the person: asked in the
   // window while one is open, and in the terminal's own dialog otherwise.
   on('classic.PermissionRequest', async ($, e, next) => {
+    void noteMode($, e.permission_mode)
     const below = await next(e)
     if (below.decision !== undefined || current === undefined) return below
 
@@ -514,13 +526,13 @@ export const register: Register = on => {
   })
 
   on('classic.UserPromptSubmit', ($, e, next) => {
-    noteMode($, e.permission_mode)
+    void noteMode($, e.permission_mode)
 
     return next(e)
   })
 
   on('classic.Stop', ($, e, next) => {
-    noteMode($, e.permission_mode)
+    void noteMode($, e.permission_mode)
 
     return next(e)
   })

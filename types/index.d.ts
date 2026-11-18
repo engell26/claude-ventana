@@ -16,6 +16,6 @@ export type Item = {
 
 declare module 'claude-code' {
   interface PluginState {
-    ventana: { link: Shaped<Link | null>; feed: Shaped<Item[]> }
+    ventana: { link: Shaped<Link | null>; feed: Shaped<Item[]>; mode: Shaped<string> }
   }
 }

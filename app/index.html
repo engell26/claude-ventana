@@ -928,9 +928,16 @@
     const picked = byId('modePicker').value
     byId('modeNow').textContent = sessionMode && sessionMode !== picked
       ? `Esta sesión va en: ${MODE_NAMES[sessionMode] ?? sessionMode}` : ''
+    // The session's own mode is known from its first prompt on; before that
+    // the summary shows the /config default and says so.
+    const isKnown = sessionMode !== ''
     const mode = sessionMode || picked
     const model = byId('modelPicker').value
-    byId('summary').textContent = [mode && (MODE_NAMES[mode] ?? mode), model].filter(Boolean).join(' · ')
+    const modeName = mode && `${MODE_NAMES[mode] ?? mode}${isKnown ? '' : ' (por defecto)'}`
+    byId('summary').textContent = [modeName, model].filter(Boolean).join(' · ')
+    byId('summary').title = isKnown
+      ? 'Modo y modelo: cámbialos en el panel'
+      : 'Modo por defecto de tu configuración: el de esta sesión aparece cuando le escribas a Claude. Cámbialos en el panel.'
   }
   for (const id of ['modePicker', 'modelPicker']) {
     byId(id).addEventListener('change', async event => {
