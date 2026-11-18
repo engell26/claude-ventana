@@ -36,7 +36,15 @@ def show_terminal() -> None:
         monitors = json.loads(hypr("monitors", "-j"))
         monitor = next((one for one in monitors if one.get("focused")), monitors[0])
         active = monitor["activeWorkspace"]["id"]
-        for client in json.loads(hypr("clients", "-j")):
+        # Only this session's terminal: other sessions may keep theirs hidden.
+        # A kitty drawing several windows is skipped, like the server does,
+        # because which one is Claude's is not known.
+        mine = [
+            client
+            for client in json.loads(hypr("clients", "-j"))
+            if str(client["pid"]) == pid
+        ]
+        for client in mine if len(mine) == 1 else []:
             if client["workspace"]["name"] == HIDDEN:
                 address = client["address"]
                 # Hyprland's Lua dispatchers, then the older spelling.
