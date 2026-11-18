@@ -1,6 +1,8 @@
 """The window: a native Qt frame around the page the local server serves.
 
 Usage: window.py <url>
+The session token comes in VENTANA_WINDOW_TOKEN, not in the arguments, so
+`ps` does not show it to other users.
 With VENTANA_TEST=1 it loads the page, prints its title and status, and exits.
 """
 
@@ -58,6 +60,11 @@ def main() -> int:
         print("usage: window.py <url>", file=sys.stderr)
         return 2
     url = sys.argv[1]
+    token = os.environ.pop("VENTANA_WINDOW_TOKEN", "")
+    if token:
+        with_token = QUrl(url)
+        with_token.setQuery(f"t={token}")
+        url = with_token.toString()
     is_test = os.environ.get("VENTANA_TEST") == "1"
 
     app = QApplication(sys.argv[:1])

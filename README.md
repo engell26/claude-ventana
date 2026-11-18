@@ -1,80 +1,108 @@
 # ventana
 
-Un mod para Claude Code que abre una ventana gráfica al lado de la terminal. Sigues trabajando con Claude en la terminal como siempre; la ventana muestra el chat y lo que pasa en la sesión, y también te deja escribirle a Claude desde ahí.
+*[Leer en español](README.es.md)*
 
-Escribe `/ventana` en una sesión para abrirla, o abre todo directo con el comando `claude-ventana` (ver Lanzador).
+<!-- Demo: record it and save it as docs/demo.gif, then remove these comment marks.
+![ventana next to a Claude Code terminal session](docs/demo.gif)
+-->
 
-## Qué tiene
+A Claude Code mod for Linux that opens a native window next to your terminal. You keep working with Claude in the terminal as usual. The window shows the chat and what is happening in the session, and you can also type to Claude from it.
 
-- **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal; Incluye atajos editables.
-- **Permisos y preguntas:** cuando Claude pide permiso para algo, te hace preguntas con opciones o termina un plan, sale una tarjeta en la ventana para responder ahí, con la vista previa del comando o del cambio. Si la ventana está cerrada, no respondes en 5 minutos o eliges "Responder en la terminal", la pregunta sale en la terminal como siempre.
-- **Actividad:** cada herramienta que usa Claude, en vivo. Con la ventana ancha sale como panel al lado del chat; con la ventana angosta sale dentro del chat, como en la terminal.
-- **Adjuntos:** pega imágenes o archivos con Ctrl+V, arrástralos a la ventana o usa el botón +. Se guardan en `~/.cache/claude-ventana/adjuntos` (se borran solos a los 7 días) y el mensaje le pasa a Claude su ruta para que los lea.
-- **Sugerencias de comandos:** al escribir `/` en el chat sale la lista de comandos disponibles, como en la terminal. Los comandos se ejecutan desde la ventana.
-- **Ocultar la terminal:** un botón del panel esconde y muestra la terminal donde corre Claude (solo en Hyprland con kitty). La terminal vuelve sola cuando una pregunta pasa a la terminal y al cerrar la ventana.
-- **Sesiones:** las sesiones de Claude abiertas ahora y tus proyectos con sus conversaciones recientes. Desde ahí llevas al frente la terminal de una sesión abierta, retomas una conversación pasada o empiezas una nueva en cualquier proyecto; cada una se abre en su propia terminal de kitty.
-- **Panel lateral:** el botón de arriba a la izquierda (o Ctrl+B) desliza un panel con las pestañas, el modo y el modelo, la terminal y lo que te queda. Con la ventana ancha empuja el chat y recuerda si lo dejaste abierto; con la ventana angosta se pone encima y se cierra con Esc o tocando afuera.
-- **Modo y modelo:** en el panel eliges el modo de permisos (Normal, Aceptar ediciones, Planear, Automático, No preguntar) y el modelo, igual que en `/config`. Arriba a la derecha siempre se ve cuál va.
-- **Lo que te queda:** al pie del panel, cuánto te queda de cada ventana de uso y cuándo se reinicia. Si te queda 15 % o menos, el botón del panel muestra un punto rojo.
-- **Uso:** duración de la sesión, costo, modelo, llenado del contexto, límites de la cuenta y tokens del último turno.
-- **Mods:** tus plugins instalados con un interruptor para prenderlos y apagarlos. El cambio se aplica en la sesión con `/reload-plugins`.
+It does not replace the terminal and does not start a second Claude. It attaches to the session you are already running, so the terminal and the window always show the same conversation.
 
-## Requisitos
+Type `/ventana` in a session to open it, or start everything at once with the `claude-ventana` command (see [Launcher](#launcher)).
 
-- Linux con escritorio gráfico (probado en Hyprland sobre Wayland).
-- [`bun`](https://bun.sh) en el `PATH`, para el servidor local.
-- `python3` con PySide6 y Qt WebEngine, para la ventana. En Arch y derivadas: `sudo pacman -S pyside6 qt6-webengine`.
+> The interface is in Spanish.
 
-## Instalar
+## Features
 
-En el prompt de una sesión de terminal:
+- **Chat:** your messages and Claude's replies. What you type there is sent as if you typed it in the terminal. Includes editable shortcuts.
+- **Permissions and questions:** when Claude asks for permission, asks a multiple-choice question or finishes a plan, a card shows up in the window so you can answer there, with a preview of the command or the edit. If the window is closed, you do not answer within 5 minutes, or you pick "Responder en la terminal", the question goes to the terminal as usual.
+- **Activity:** every tool Claude uses, live. In a wide window it is a side panel; in a narrow window it shows inside the chat, like in the terminal.
+- **Attachments:** paste images or files with Ctrl+V, drag them in, or use the + button. They are saved to `~/.cache/claude-ventana/adjuntos` (deleted after 7 days) and the message gives Claude their path.
+- **Command suggestions:** type `/` in the chat to see the available commands, like in the terminal.
+- **Hide the terminal:** a button hides and shows the terminal Claude runs in. It comes back by itself when a question moves to the terminal and when you close the window.
+- **Sessions:** the Claude sessions open right now and your projects with their recent conversations. Bring an open session's terminal to the front, resume a past conversation, or start a new one in any project.
+- **Side panel:** the top-left button (or Ctrl+B) slides in a panel with the tabs, the permission mode and model, the terminal button and your remaining usage.
+- **Mode and model:** pick the permission mode (Normal, Accept edits, Plan, Auto, Don't ask) and the model, like in `/config`.
+- **Remaining usage:** how much is left in each usage window and when it resets. At 15 % or less, the panel button shows a red dot.
+- **Usage:** session duration, cost, model, context fill, account limits and the last turn's tokens.
+- **Mods:** your installed plugins with a switch to turn each one on and off. The change applies with `/reload-plugins`.
+
+## What works where
+
+The core of the window works on any Linux desktop. A few extras move windows around, and those need Hyprland and kitty.
+
+| Feature | Any desktop (GNOME, KDE, Sway…) | Hyprland | Needs kitty |
+|---|:-:|:-:|:-:|
+| Chat, permissions, questions, activity | ✅ | ✅ | |
+| Attachments, command suggestions, shortcuts | ✅ | ✅ | |
+| Mode, model, usage, remaining usage, mods | ✅ | ✅ | |
+| List open sessions and past conversations | ✅ | ✅ | |
+| Hide and show the terminal | ❌ (button not shown) | ✅ | ✅ |
+| Bring an open session's terminal to the front | ❌ | ✅ | |
+| Resume or start a session from the window | ✅ | ✅ | ✅ |
+| Launcher from the app menu | ✅ | ✅ | ✅ |
+
+Tested on Hyprland 0.57 (Lua config) on Wayland, with Claude Code 2.1.322.
+
+## Requirements
+
+- Linux with a graphical desktop.
+- [`bun`](https://bun.sh) on your `PATH`, for the local server.
+- `python3` with PySide6 and Qt WebEngine, for the window. On Arch and derivatives: `sudo pacman -S pyside6 qt6-webengine`. **Heads-up:** these are big, around 350 MB installed, more if you do not already have Qt 6. With pip it is similar: `pip install PySide6`.
+- Optional: Hyprland and [kitty](https://sw.kovidgoyal.net/kitty/) for the extras in the table above.
+
+## Install
+
+At the prompt of a terminal session:
 
 ```
 /plugin install ventana --marketplace engell26/claude-ventana
 ```
 
-Responde `y` para añadir el marketplace y elige el alcance (el de usuario lo deja disponible en todas tus sesiones).
+Answer `y` to add the marketplace and choose the scope (user scope makes it available in all your sessions).
 
-Desde una shell:
+From a shell:
 
 ```
 claude plugin install ventana --marketplace engell26/claude-ventana
 ```
 
-En la app de escritorio, donde `/plugin` no corre: pulsa + junto a la caja de prompt, luego Plugins, Add marketplace con `engell26/claude-ventana`, y Add plugin.
+## Launcher
 
-## Lanzador
-
-`lanzador/claude-ventana` abre Claude con la ventana ya abierta. Para tenerlo como comando y en el menú de aplicaciones:
+The launcher is an optional command that opens Claude with the window already open. Installing the plugin does not set it up, and Claude Code keeps the plugin in a folder whose name changes with each version, so clone the repo to get it:
 
 ```
+git clone https://github.com/engell26/claude-ventana ~/claude-ventana
 ln -s ~/claude-ventana/lanzador/claude-ventana ~/.local/bin/claude-ventana
 cp ~/claude-ventana/lanzador/claude-ventana.desktop ~/.local/share/applications/
 ```
 
-En una terminal, `claude-ventana` corre Claude ahí mismo; desde el menú abre kitty con Claude adentro. Por defecto la terminal se oculta al abrir la ventana; se cambia en el panel lateral.
+`~/.local/bin` must be on your `PATH`. In a terminal, `claude-ventana` runs Claude right there. From the app menu it opens kitty with Claude inside. By default the terminal hides when the window opens; you can change that in the side panel. A `git pull` in `~/claude-ventana` updates the launcher.
 
-## Cómo funciona
+## How it works
 
-Son tres piezas:
+Three pieces:
 
-1. `hooks/register.ts`: el mod. Solo observa la sesión: ningún gancho bloquea ni cambia lo que hace Claude, así que si la ventana o el servidor fallan la sesión sigue igual.
-2. `app/server.ts`: un servidor local que el mod arranca con `bun` cuando escribes `/ventana`. Se apaga solo un minuto después de cerrar la ventana.
-3. `app/window.py` y `app/index.html`: la ventana Qt y la página que muestra.
+1. `hooks/register.ts`: the mod. It only observes the session: no hook blocks or changes what Claude does, so if the window or the server fail, the session goes on as usual.
+2. `app/server.ts`: a local server the mod starts with `bun` when you type `/ventana`. It shuts itself down a minute after the window closes.
+3. `app/window.py` and `app/index.html`: the Qt window and the page it shows.
 
-## Seguridad
+## Security
 
-- El servidor escucha solo en `127.0.0.1`, en un puerto distinto por sesión.
-- Cada petición necesita un token aleatorio de la sesión, y se rechazan las que vienen de otro origen.
-- La página no carga nada de internet.
-- Antes del primer cambio de plugins se guarda una copia de `~/.claude/settings.json` como `settings.json.antes-de-ventana`.
+- The server listens only on `127.0.0.1`, on a different port for each session.
+- Every request needs a random per-session token. The server checks the `Host` and `Origin` headers, so a website open in your browser cannot reach it, not even through DNS rebinding.
+- The token reaches the window through an environment variable, not the command line, so other users on the machine cannot read it with `ps`.
+- Markdown is escaped before it is turned into HTML, and the page loads nothing from the internet.
+- Before the first plugin change, a copy of `~/.claude/settings.json` is saved as `settings.json.antes-de-ventana`.
 
-Los atajos se guardan en `~/.config/claude-ventana/atajos.json`.
+Shortcuts are saved in `~/.config/claude-ventana/atajos.json`.
 
-## Aviso
+## Note
 
-La API de mods de Claude Code es de acceso anticipado y puede cambiar entre versiones. Este mod se escribió contra Claude Code 2.1.322.
+Claude Code's mod API is in early access and may change between versions. This mod was written against Claude Code 2.1.322.
 
-## Licencia
+## License
 
-MIT. Mira el archivo [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

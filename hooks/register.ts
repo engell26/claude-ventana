@@ -221,7 +221,7 @@ async function fill($: EngineInterface, text: string): Promise<void> {
 // Starts the server if it is not running and asks it for the window.
 async function openWindow($: EngineInterface): Promise<boolean> {
   const timeout = $.clock.sleep(READY_TIMEOUT_MS).then((): never => {
-    throw new Error('el servidor no respondio a tiempo')
+    throw new Error('el servidor no respondió a tiempo')
   })
   const found = await Promise.race([start($, await read($, link)), timeout])
   const opened = await $.http.fetch(`http://127.0.0.1:${found.port}/open`, {
@@ -318,13 +318,13 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
         }
       }
     } catch (error) {
-      $.ui.log(`ventana: el servidor no arranco: ${String(error)}`, {
+      $.ui.log(`ventana: el servidor no arrancó: ${String(error)}`, {
         to: 'debug',
       })
     } finally {
       server = undefined
       current = undefined
-      fail(new Error('el servidor de la ventana termino'))
+      fail(new Error('el servidor de la ventana terminó'))
     }
   }
 
@@ -342,7 +342,7 @@ export const register: Register = on => {
 
     await $.command.register({
       name: 'ventana',
-      description: 'Abre la ventana grafica de Claude',
+      description: 'Abre la ventana gráfica de Claude',
     })
     // A window was open before this reload: bring its server back where it
     // was. The server leaves by itself if no window comes back to it.
@@ -529,7 +529,7 @@ export const register: Register = on => {
     try {
       const launched = await openWindow($)
 
-      return { text: launched ? 'Ventana abierta.' : 'La ventana ya esta abierta.' }
+      return { text: launched ? 'Ventana abierta.' : 'La ventana ya está abierta.' }
     } catch (error) {
       return { text: `No pude abrir la ventana: ${String(error)}` }
     }

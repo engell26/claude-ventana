@@ -497,11 +497,14 @@ const json = (body: unknown, status = 200) =>
   })
 
 const launchWindow = (port: number) => {
-  const url = `http://127.0.0.1:${port}/?t=${token}`
+  const url = `http://127.0.0.1:${port}/`
   // setsid -f: the window outlives this server, which restarts on a reload.
+  // The token goes in the environment, not the arguments: any user can read
+  // a process's arguments with `ps`, but only its owner can read its environment.
   spawn('setsid', ['-f', 'python3', join(here, 'window.py'), url], {
     stdio: 'ignore',
     detached: true,
+    env: { ...process.env, VENTANA_WINDOW_TOKEN: token },
   }).unref()
 }
 
