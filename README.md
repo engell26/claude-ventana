@@ -15,6 +15,7 @@ Type `/ventana` in a session to open it, or start everything at once with the `c
 ## Features
 
 - **Chat:** your messages and Claude's replies. What you type there is sent as if you typed it in the terminal. While Claude works, the ■ button stops it, like Esc in the terminal. Includes editable shortcuts.
+- **Agents:** when Claude launches subagents, a panel slides in from the right. Each agent is a little robot beamed down from Claude that works, waits or finishes in front of you. Its card shows what it is doing right now, the last thing it wrote, its tools, its context and the tokens it wrote, plus its brief and its reply.
 - **Permissions and questions:** when Claude asks for permission, asks a multiple-choice question or finishes a plan, a card shows up in the window so you can answer there, with a preview of the command or the edit. If the window is closed, you do not answer within 5 minutes, or you pick "Responder en la terminal", the question goes to the terminal as usual.
 - **Activity:** every tool Claude uses, live. In a wide window it is a side panel; in a narrow window it shows inside the chat, like in the terminal.
 - **Attachments:** paste images or files with Ctrl+V, drag them in, or use the + button. They are saved to `~/.cache/claude-ventana/adjuntos` (deleted after 7 days) and the message gives Claude their path.
@@ -34,7 +35,7 @@ The core of the window works on any Linux desktop. A few extras move windows aro
 
 | Feature | Any desktop (GNOME, KDE, Sway…) | Hyprland | Needs kitty |
 |---|:-:|:-:|:-:|
-| Chat, permissions, questions, activity | ✅ | ✅ | |
+| Chat, agents, permissions, questions, activity | ✅ | ✅ | |
 | Attachments, command suggestions, shortcuts | ✅ | ✅ | |
 | Mode, model, usage, remaining usage, mods | ✅ | ✅ | |
 | List open sessions and past conversations | ✅ | ✅ | |

@@ -27,6 +27,9 @@ let isBusy = false
 let usage: unknown = null
 let settings: unknown[] = []
 let mode = ''
+// The subagents the Agentes panel shows, oldest first; the mod sends each change.
+type Agent = { id: string; status?: string }
+let agents: Agent[] = []
 
 // The window's own preferences, kept beside the shortcuts.
 type Prefs = { hideTerminalOnOpen: boolean }
@@ -556,6 +559,7 @@ const handle = async (request: Request, port: number): Promise<Response> => {
             asks: [...asks.values()].map(held => held.ask),
             settings,
             mode,
+            agents,
             prefs: readPrefs(),
           }),
         )
@@ -606,6 +610,23 @@ const handle = async (request: Request, port: number): Promise<Response> => {
         : [...items, item]
     ).slice(-100)
     broadcast('item', { item })
+
+    return json({})
+  }
+
+  if (request.method === 'POST' && url.pathname === '/agent') {
+    const { agent } = (await request.json()) as { agent: Agent }
+    if (typeof agent?.id !== 'string') return json({ error: 'agent' }, 400)
+    agents = [...agents.filter(one => one.id !== agent.id), agent].slice(-30)
+    broadcast('agent', { agent })
+
+    return json({})
+  }
+
+  // From the page: forget the agents that ended.
+  if (request.method === 'POST' && url.pathname === '/agents-clear') {
+    agents = agents.filter(one => !['completed', 'failed', 'killed'].includes(one.status ?? ''))
+    broadcast('agents', { agents })
 
     return json({})
   }

@@ -45,6 +45,34 @@ type WindowAnswer = {
   message?: string
 }
 
+// One subagent as the window's Agentes panel draws it.
+type Crew = {
+  id: string
+  description: string
+  type: string
+  model: string
+  prompt: string
+  parentId?: string
+  isBackground: boolean
+  status: string
+  startedAt: number
+  endedAt?: number
+  // Tool calls so far, and the names of the last few.
+  tools: number
+  trail: string[]
+  doing?: { tool: string; detail: string; isDone: boolean; isError?: boolean }
+  // The tail of what it last wrote between tool calls.
+  said?: string
+  // Its context now (the last request's input) and what it wrote in all.
+  context: number
+  written: number
+  answer?: string
+}
+
+const ENDED = ['completed', 'failed', 'killed']
+const CREW_ROWS = 30
+const CREW_EVERY_MS = 1500
+
 type ServerLine =
   | { type: 'ready'; port: number; token: string }
   | { type: 'bye' }
@@ -58,6 +86,9 @@ let server: Promise<Link> | undefined
 let current: Link | undefined
 // When the Chat tab was last sent the conversation, to pace it in a turn.
 let chatAt = 0
+// The subagents of this module's life, and whether a timer follows them.
+const crew = new Map<string, Crew>()
+let isWatching = false
 
 function post($: EngineInterface, path: string, body: object): void {
   if (current === undefined) return
@@ -270,6 +301,84 @@ async function noteMode($: EngineInterface, now: string | undefined): Promise<vo
   post($, '/mode', { mode: now })
 }
 
+// Changes one agent's row, adding it if new, and shows it in the window.
+function crewPut($: EngineInterface, id: string, change: Partial<Crew>): Crew {
+  const agent: Crew = {
+    ...(crew.get(id) ?? {
+      id,
+      description: 'Agente',
+      type: '',
+      model: '',
+      prompt: '',
+      isBackground: false,
+      status: 'running',
+      startedAt: 0,
+      tools: 0,
+      trail: [],
+      context: 0,
+      written: 0,
+    }),
+    ...change,
+  }
+  crew.delete(id)
+  crew.set(id, agent)
+  for (const old of crew.keys()) {
+    if (crew.size <= CREW_ROWS) break
+    crew.delete(old)
+  }
+  post($, '/agent', { agent })
+
+  return agent
+}
+
+// Follows the agents' status while any works: the list knows the ones that
+// wait, idle, fail or were stopped, which no event of theirs says.
+function watchCrew($: EngineInterface): void {
+  if (isWatching) return
+  isWatching = true
+  const look = async () => {
+    try {
+      const listed = await $.agent.list()
+      const now = await $.clock.now()
+      for (const one of listed) {
+        const known = crew.get(one.id)
+        const isEnded = ENDED.includes(one.status)
+        if (known === undefined) {
+          if (!isEnded) {
+            crewPut($, one.id, {
+              description: one.description || one.name || 'Agente',
+              type: one.type,
+              parentId: one.parentId,
+              status: one.status,
+              startedAt: now,
+            })
+          }
+          continue
+        }
+        if (known.status === one.status) continue
+        crewPut($, one.id, {
+          status: one.status,
+          ...(isEnded ? { endedAt: known.endedAt ?? now } : { endedAt: undefined }),
+        })
+      }
+      // Gone from the list before its end was seen: it ended.
+      for (const known of crew.values()) {
+        if (ENDED.includes(known.status) || listed.some(one => one.id === known.id)) continue
+        if (now - known.startedAt < 5000) continue
+        crewPut($, known.id, { status: 'completed', endedAt: now })
+      }
+    } catch {
+      // The panel keeps what it showed.
+    }
+    if ([...crew.values()].some(one => !ENDED.includes(one.status))) {
+      $.clock.after(CREW_EVERY_MS, () => void look())
+    } else {
+      isWatching = false
+    }
+  }
+  $.clock.after(0, () => void look())
+}
+
 function describe(input: Record<string, unknown>): string {
   for (const key of DETAIL_KEYS) {
     const value = input[key]
@@ -308,6 +417,7 @@ function start($: EngineInterface, prior: Link | null): Promise<Link> {
       post($, '/snapshot', { items: await read($, feed) })
       const mode = await read($, sessionMode)
       if (mode !== '') post($, '/mode', { mode })
+      for (const agent of crew.values()) post($, '/agent', { agent })
       void report($)
       void chat($)
       void commands($)
@@ -429,13 +539,51 @@ export const register: Register = on => {
       chatAt = item.startedAt
       void chat($)
     }
+    // What a subagent is doing, for the Agentes panel.
+    const by = e.agentId
+    if (by !== undefined) {
+      const known = crew.get(by)
+      crewPut($, by, {
+        tools: (known?.tools ?? 0) + 1,
+        trail: [...(known?.trail ?? []), item.label].slice(-8),
+        doing: { tool: item.label, detail: item.detail, isDone: false },
+        ...(known === undefined || ENDED.includes(known.status)
+          ? { status: 'running', endedAt: undefined, startedAt: known?.startedAt || item.startedAt }
+          : {}),
+      })
+      watchCrew($)
+    }
+    if (e.tool === 'Agent') watchCrew($)
     const ran = await next(e)
     const endedAt = await $.clock.now().catch(() => item.startedAt)
-    await record($, {
-      ...item,
-      endedAt,
-      isError: ran.deny !== undefined || ran.isError === true,
-    })
+    const isError = ran.deny !== undefined || ran.isError === true
+    await record($, { ...item, endedAt, isError })
+    if (by !== undefined) {
+      const known = crew.get(by)
+      if (known?.doing !== undefined && known.doing.tool === item.label && known.doing.detail === item.detail) {
+        crewPut($, by, { doing: { ...known.doing, isDone: true, isError } })
+      }
+    }
+    // A foreground agent's own call ends with its totals.
+    const settled = (ran as { result?: unknown }).result
+    if (e.tool === 'Agent' && typeof settled === 'object' && settled !== null) {
+      const totals = settled as {
+        agentId?: string
+        status?: string
+        totalTokens?: number
+        content?: { text?: string }[]
+        resolvedModel?: string
+      }
+      if (typeof totals.agentId === 'string' && totals.status === 'completed' && crew.has(totals.agentId)) {
+        const answer = (totals.content ?? []).map(part => part.text ?? '').join('\n').trim()
+        crewPut($, totals.agentId, {
+          status: 'completed',
+          endedAt: crew.get(totals.agentId)?.endedAt ?? endedAt,
+          ...(answer !== '' ? { answer: answer.slice(0, 2000) } : {}),
+          ...(totals.resolvedModel ? { model: totals.resolvedModel } : {}),
+        })
+      }
+    }
     // What Claude wrote so far this turn, a few seconds apart at most.
     if (!item.isAgent && endedAt - chatAt > CHAT_EVERY_MS) {
       chatAt = endedAt
@@ -537,9 +685,67 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A subagent starts: its row in the Agentes panel.
+  on('agent.spawn', async ($, e, next) => {
+    const started = await next(e)
+    if (started.agentId !== undefined) {
+      const now = await $.clock.now().catch(() => 0)
+      crewPut($, started.agentId, {
+        description: e.description || e.name || 'Agente',
+        type: e.subagentType,
+        model: started.model,
+        prompt: e.prompt.slice(0, 1500),
+        parentId: e.parentAgentId,
+        isBackground: e.background,
+        status: 'running',
+        startedAt: now,
+        endedAt: undefined,
+      })
+      watchCrew($)
+    }
+
+    return started
+  })
+
+  // Each model request of a subagent: its context and what it wrote.
+  // A streaming event: the chunks pass through untouched (`yield*`).
+  on('turn.step', async function* ($, e, next) {
+    const stepped = yield* next(e)
+    if (e.agentId === undefined || stepped === undefined) return stepped
+    const known = crew.get(e.agentId)
+    if (known !== undefined) {
+      const used = stepped.usage
+      const said = stepped.answer.trim()
+      crewPut($, e.agentId, {
+        ...(used
+          ? {
+              context: used.input_tokens + used.cache_read_input_tokens + used.cache_creation_input_tokens,
+              written: known.written + used.output_tokens,
+              model: known.model || used.model,
+            }
+          : {}),
+        ...(said !== '' ? { said: said.slice(-280) } : {}),
+      })
+    }
+
+    return stepped
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     const input = e as unknown as Record<string, unknown>
+    if (e.agentId !== undefined && crew.has(e.agentId)) {
+      const known = crew.get(e.agentId)
+      const now = await $.clock.now().catch(() => 0)
+      crewPut($, e.agentId, {
+        status: e.reason === 'aborted' ? 'killed' : e.reason === 'answer' ? 'completed' : 'failed',
+        endedAt: now,
+        answer: e.answer.trim().slice(0, 2000) || known?.answer,
+        ...(done.usage && known !== undefined && known.written < done.usage.output_tokens
+          ? { written: done.usage.output_tokens }
+          : {}),
+      })
+    }
     if (input.agentId === undefined) {
       runningTurn = undefined
       post($, '/status', { isBusy: false })

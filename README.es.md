@@ -13,6 +13,7 @@ Escribe `/ventana` en una sesión para abrirla, o abre todo directo con el coman
 ## Qué tiene
 
 - **Chat:** tus mensajes y las respuestas de Claude. Lo que escribes ahí se envía directo, como si lo teclearas en la terminal. Mientras Claude trabaja, el botón ■ lo detiene, como Esc en la terminal. Incluye atajos editables.
+- **Agentes:** cuando Claude lanza subagentes, se desliza un panel por la derecha. Cada agente es un robotito que baja desde Claude y trabaja, espera o termina frente a ti. Su tarjeta muestra qué está haciendo ahora, lo último que escribió, sus herramientas, su contexto y los tokens que escribió, además del encargo y su respuesta.
 - **Permisos y preguntas:** cuando Claude pide permiso para algo, te hace preguntas con opciones o termina un plan, sale una tarjeta en la ventana para responder ahí, con la vista previa del comando o del cambio. Si la ventana está cerrada, no respondes en 5 minutos o eliges "Responder en la terminal", la pregunta sale en la terminal como siempre.
 - **Actividad:** cada herramienta que usa Claude, en vivo. Con la ventana ancha sale como panel al lado del chat; con la ventana angosta sale dentro del chat, como en la terminal.
 - **Adjuntos:** pega imágenes o archivos con Ctrl+V, arrástralos a la ventana o usa el botón +. Se guardan en `~/.cache/claude-ventana/adjuntos` (se borran solos a los 7 días) y el mensaje le pasa a Claude su ruta para que los lea.
@@ -32,7 +33,7 @@ Lo principal de la ventana funciona en cualquier escritorio de Linux. Algunos ex
 
 | Función | Cualquier escritorio (GNOME, KDE, Sway…) | Hyprland | Necesita kitty |
 |---|:-:|:-:|:-:|
-| Chat, permisos, preguntas, actividad | ✅ | ✅ | |
+| Chat, agentes, permisos, preguntas, actividad | ✅ | ✅ | |
 | Adjuntos, sugerencias de comandos, atajos | ✅ | ✅ | |
 | Modo, modelo, uso, lo que te queda, mods | ✅ | ✅ | |
 | Ver sesiones abiertas y conversaciones pasadas | ✅ | ✅ | |
